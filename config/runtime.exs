@@ -622,6 +622,9 @@ config :explorer, Explorer.MicroserviceInterfaces.Metadata,
 config :explorer, Explorer.SmartContract.StylusVerifierInterface,
   service_url: ConfigHelper.parse_microservice_url("MICROSERVICE_STYLUS_VERIFIER_URL")
 
+config :explorer, Explorer.SmartContract.FluentVerifierInterface,
+  service_url: ConfigHelper.parse_microservice_url("MICROSERVICE_FLUENT_VERIFIER_URL")
+
 config :explorer, Explorer.MicroserviceInterfaces.MultichainSearch,
   api_key: System.get_env("MICROSERVICE_MULTICHAIN_SEARCH_API_KEY"),
   service_url: System.get_env("MICROSERVICE_MULTICHAIN_SEARCH_URL"),
