@@ -50,7 +50,6 @@ defmodule BlockScoutWeb.Routers.SmartContractsApiV2Router do
     get("/counters", V2.SmartContractController, :smart_contracts_counters)
     get("/:address_hash", V2.SmartContractController, :smart_contract)
     get("/:address_hash/audit-reports", V2.SmartContractController, :audit_reports_list)
-
     get("/verification/config", V2.VerificationController, :config)
   end
 
@@ -76,6 +75,11 @@ defmodule BlockScoutWeb.Routers.SmartContractsApiV2Router do
 
     if @chain_type === :arbitrum do
       post("/stylus-github-repository", V2.VerificationController, :verification_via_stylus_github_repository)
+    end
+
+    if @chain_type === :fluent do
+      post("/fluent-github-repository", V2.VerificationController, :verification_via_fluent_github_repository)
+      post("/fluent-archive", V2.VerificationController, :verification_via_fluent_archive)
     end
   end
 end
