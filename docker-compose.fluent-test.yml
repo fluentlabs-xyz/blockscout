@@ -1,0 +1,75 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: blockscout
+      POSTGRES_PASSWORD: blockscout
+      POSTGRES_DB: blockscout
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blockscout"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  blockscout:
+    image: blockscout/blockscout:fluent-test
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database - ВАЖНО: отключаем SSL
+      DATABASE_URL: postgresql://blockscout:blockscout@postgres:5432/blockscout?ssl=false
+      ECTO_USE_SSL: "false"
+      
+      # Chain configuration
+      CHAIN_TYPE: fluent
+      NETWORK: "Fluent Devnet"
+      SUBNETWORK: "Fluent"
+      CHAIN_ID: "20993"
+      
+      # RPC endpoints
+      ETHEREUM_JSONRPC_VARIANT: geth
+      ETHEREUM_JSONRPC_HTTP_URL: https://rpc.dev.gblend.xyz
+      ETHEREUM_JSONRPC_TRACE_URL: https://rpc.dev.gblend.xyz
+      ETHEREUM_JSONRPC_WS_URL: wss://rpc.dev.gblend.xyz
+      
+      # Pool settings (увеличиваем для стабильности)
+      POOL_SIZE: "50"
+      POOL_SIZE_API: "10"
+      
+      # Fluent verifier (пока отключим для теста)
+      MICROSERVICE_FLUENT_VERIFIER_ENABLED: "false"
+      
+      # Basic settings
+      COIN: ETH
+      COIN_NAME: Ethereum
+      
+      # API
+      DISABLE_API: "false"
+      API_V2_ENABLED: "true"
+      
+      # Indexer
+      INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER: "false"
+      INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: "false"
+      
+      # Disable other features for initial test
+      MICROSERVICE_STYLUS_VERIFIER_ENABLED: "false"
+      
+      # Logging
+      HEART_BEAT_TIMEOUT: "30"
+      HEART_COMMAND: "systemctl start explorer.service"
+      
+    ports:
+      - "4000:4000"
+    command: >
+      sh -c "bin/blockscout eval 'Explorer.ReleaseTasks.create_and_migrate()' && 
+             bin/blockscout start"
+
+volumes:
+  postgres_data:

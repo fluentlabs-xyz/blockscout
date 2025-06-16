@@ -311,6 +311,7 @@ defmodule ConfigHelper do
     "celo",
     "ethereum",
     "filecoin",
+    "fluent",
     "optimism",
     "polygon_edge",
     "polygon_zkevm",
