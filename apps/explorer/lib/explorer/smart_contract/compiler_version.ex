@@ -68,13 +68,7 @@ defmodule Explorer.SmartContract.CompilerVersion do
 
   defp fetch_compiler_versions(compiler_list_fn, :fluent = compiler_type) do
     if FluentVerifierInterface.enabled?() do
-      case compiler_list_fn.() do
-        {:ok, %{rustc_versions: rustc_versions}} ->
-          {:ok, rustc_versions}
-
-        _ ->
-          {:error, "Fluent verifier microservice is unavailable"}
-      end
+      fetch_compiler_versions_sc_verified_enabled(compiler_list_fn, compiler_type)
     else
       {:ok, []}
     end
@@ -219,7 +213,6 @@ defmodule Explorer.SmartContract.CompilerVersion do
     case compiler do
       :solc -> get_solc_latest_stable_version(compiler_version)
       :vyper -> get_vyper_latest_stable_version(compiler_version)
-      :fluent -> compiler_version
     end
   end
 
