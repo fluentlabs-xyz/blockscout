@@ -80,3 +80,7 @@ tasks_in_progress
 
 # postgres
 /pgdata
+/fluent-data
+
+
+/.wake
