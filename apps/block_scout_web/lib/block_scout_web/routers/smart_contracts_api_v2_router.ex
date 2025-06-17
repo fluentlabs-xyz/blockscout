@@ -65,6 +65,9 @@ defmodule BlockScoutWeb.Routers.SmartContractsApiV2Router do
 
     post("/standard-input", V2.VerificationController, :verification_via_standard_input)
 
+    post("/fluent-github-repository", V2.VerificationController, :verification_via_fluent_github_repository)
+    post("/fluent-archive", V2.VerificationController, :verification_via_fluent_archive)
+
     if @chain_type !== :zksync do
       post("/flattened-code", V2.VerificationController, :verification_via_flattened_code)
       post("/sourcify", V2.VerificationController, :verification_via_sourcify)
@@ -76,11 +79,6 @@ defmodule BlockScoutWeb.Routers.SmartContractsApiV2Router do
 
     if @chain_type === :arbitrum do
       post("/stylus-github-repository", V2.VerificationController, :verification_via_stylus_github_repository)
-    end
-
-    if @chain_type === :fluent do
-      post("/fluent-github-repository", V2.VerificationController, :verification_via_fluent_github_repository)
-      post("/fluent-archive", V2.VerificationController, :verification_via_fluent_archive)
     end
   end
 end

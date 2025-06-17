@@ -233,7 +233,7 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
       compiler_settings: nil,
       license_type: :none,
       is_blueprint: false,
-      language: :fluent_rust,
+      language: :solidity, # TODO(d1r1): should we change it to fluent_rust?
       package_name: params["package_name"],
       fluent_metadata: params["fluent_metadata"]
     }
