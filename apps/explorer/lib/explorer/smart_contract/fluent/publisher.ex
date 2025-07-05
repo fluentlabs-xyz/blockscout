@@ -2,12 +2,10 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
   @moduledoc """
   Module responsible for verifying and publishing Fluent smart contracts.
 
-  The verification process includes:
-  1. Initiating verification through a microservice that compares Git repository
-     or archive source code against deployed WASM bytecode
-  2. Processing the verification response, including ABI and source files
-  3. Creating or updating the smart contract record in the database
-  4. Handling verification failures by creating invalid changesets with error messages
+  This module orchestrates the verification process by calling the `Verifier`
+  and, upon success, combines the verification metadata with user-provided
+  data (like ABI and contract name) to create or update the smart contract
+  record in the database.
   """
 
   require Logger
@@ -16,127 +14,171 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
   alias Explorer.SmartContract.Fluent.Verifier
   alias Explorer.SmartContract.Helper
 
-  @default_file_name "src/lib.rs"
-
-  @sc_verification_via_git_repository_started "Smart-contract verification via Git repository started"
-  @sc_verification_via_archive_started "Smart-contract verification via archive started"
-
   @doc """
-  Verifies and publishes a Fluent smart contract using Git repository source code.
+  Verifies and publishes a Fluent smart contract.
+
+  This is the main entry point for the publishing process. It takes the full
+  user-provided payload, initiates verification, and handles the outcome.
 
   ## Parameters
-  - `address_hash`: The contract's address hash as binary or `t:Explorer.Chain.Hash.t/0`
-  - `params`: Map containing verification parameters
+  - `address_hash`: The contract's address hash.
+  - `params`: A map containing the full user request payload, including
+    `contract_name`, `abi`, source details, and compile settings.
 
   ## Returns
-  - `{:ok, smart_contract}` if verification and database storage succeed
-  - `{:error, changeset}` if verification fails or there are validation errors
+  - `{:ok, smart_contract}` if verification and database persistence succeed.
+  - `{:error, changeset}` if verification fails or there are validation errors.
   """
-  @spec publish_git(binary() | Explorer.Chain.Hash.t(), %{String.t() => any()}) ::
+  @spec publish(binary() | Explorer.Chain.Hash.t(), %{String.t() => any()}) ::
           {:error, Ecto.Changeset.t()} | {:ok, Explorer.Chain.SmartContract.t()}
-  def publish_git(address_hash, params) do
-    Logger.info(@sc_verification_via_git_repository_started)
+  def publish(address_hash, params) do
+    Logger.info("Fluent smart contract verification started for address #{inspect(address_hash)}.")
 
-    case Verifier.evaluate_authenticity_git(address_hash, params) do
-      {:ok, result_params} ->
-        process_verifier_response(result_params, address_hash)
+    case Verifier.evaluate_authenticity(address_hash, params) do
+      {:ok, verification_result} ->
+        process_successful_verification(verification_result, params, address_hash)
 
       {:error, error} ->
-        handle_verification_error(address_hash, params, error, false)
-
-      _ ->
-        {:error, unverified_smart_contract(address_hash, params, "Unexpected error", nil)}
+        process_failed_verification(address_hash, params, error)
     end
   end
 
-  @doc """
-  Verifies and publishes a Fluent smart contract using source code archive.
+  #
+  # Internal Functions: Success Path
+  #
 
-  ## Parameters
-  - `address_hash`: The contract's address hash as binary or `t:Explorer.Chain.Hash.t/0`
-  - `params`: Map containing verification parameters
+  defp process_successful_verification(verification_result, initial_params, address_hash) do
+    # The `verification_result` map corresponds to the `VerificationResult` proto message.
+    # The `initial_params` map is the original request from the user.
+    prepared_attrs = prepare_attributes(verification_result, initial_params, address_hash)
 
-  ## Returns
-  - `{:ok, smart_contract}` if verification and database storage succeed
-  - `{:error, changeset}` if verification fails or there are validation errors
-  """
-  @spec publish_archive(binary() | Explorer.Chain.Hash.t(), %{String.t() => any()}) ::
-          {:error, Ecto.Changeset.t()} | {:ok, Explorer.Chain.SmartContract.t()}
-  def publish_archive(address_hash, params) do
-    Logger.info(@sc_verification_via_archive_started)
+    abi = initial_params["abi"] || []
 
-    case Verifier.evaluate_authenticity_archive(address_hash, params) do
-      {:ok, result_params} ->
-        process_verifier_response(result_params, address_hash)
-
-      {:error, error} ->
-        handle_verification_error(address_hash, params, error, true)
-
-      _ ->
-        {:error, unverified_smart_contract(address_hash, params, "Unexpected error", nil, true)}
-    end
+    publish_smart_contract(address_hash, prepared_attrs, abi)
   end
 
-  # Process successful verification response
-  defp process_verifier_response(
-         %{
-           "contract_name" => contract_name,
-           "abi_json_string" => abi_string,
-           "build_metadata" => build_metadata,
-           "source_files" => source_files
-         },
-         address_hash
-       ) do
-    # Find main source file
+  defp prepare_attributes(verification_result, initial_params, address_hash) do
+    source_files = verification_result["source_files"] || %{}
     main_file_path = find_main_source_file(source_files)
     main_source_code = Map.get(source_files, main_file_path, "")
 
-    # Prepare secondary sources
-    secondary_sources = prepare_secondary_sources(source_files, main_file_path, address_hash)
+    package_name =
+      source_files
+      |> find_cargo_toml_content()
+      |> parse_package_name_from_toml()
 
-    # Extract metadata
-    compiler_version = get_compiler_version(build_metadata)
-    package_name = get_package_name(build_metadata)
-
-    prepared_params =
-      %{}
-      |> Map.put("compiler_version", compiler_version)
-      |> Map.put("contract_source_code", main_source_code)
-      |> Map.put("name", contract_name)
-      |> Map.put("file_path", main_file_path)
-      |> Map.put("secondary_sources", secondary_sources)
-      |> Map.put("package_name", package_name)
-      |> Map.put("fluent_metadata", build_metadata)
-
-    publish_smart_contract(address_hash, prepared_params, Jason.decode!(abi_string || "null"))
+    %{
+      # User-provided data
+      "name" => initial_params["contract_name"],
+      "abi" => initial_params["abi"] || [],
+      # Data from verifier
+      "compiler_version" => verification_result["rustc_version"],
+      "contract_source_code" => main_source_code,
+      "file_path" => main_file_path,
+      "secondary_sources" => prepare_secondary_sources(source_files, main_file_path, address_hash),
+      "package_name" => package_name,
+      "fluent_metadata" => build_fluent_metadata(verification_result)
+    }
   end
 
-  # Handle verification errors
-  defp handle_verification_error(address_hash, params, error, with_files?) do
-    error_message = extract_error_message(error)
-    {:error, unverified_smart_contract(address_hash, params, error, error_message, with_files?)}
+  defp publish_smart_contract(address_hash, params, abi) do
+    attrs = build_final_attributes(address_hash, params, abi)
+
+    case SmartContract.create_or_update_smart_contract(address_hash, attrs, true) do
+      {:ok, _} = ok_or_error ->
+        Logger.info("Fluent smart-contract #{inspect(address_hash)} successfully published.")
+        ok_or_error
+
+      {:error, _} = ok_or_error ->
+        Logger.error("Fluent smart-contract #{inspect(address_hash)} failed to publish: #{inspect(ok_or_error)}")
+        ok_or_error
+    end
   end
 
-  # Extract error message from various error formats
-  defp extract_error_message(%{"error_message" => msg}), do: msg
-  defp extract_error_message(%{"errorMessage" => msg}), do: msg
-  defp extract_error_message(%{"message" => msg}), do: msg
-  defp extract_error_message(error) when is_binary(error), do: error
-  defp extract_error_message(_), do: nil
+  #
+  # Internal Functions: Failure Path
+  #
 
-  # Find the main source file
+  defp process_failed_verification(address_hash, params, error) do
+    error_message = error["error_message"] || "Verification failed with an unknown error."
+    Logger.error("Fluent smart-contract verification for #{inspect(address_hash)} failed: #{error_message}")
+    {:error, unverified_smart_contract_changeset(address_hash, params, error, error_message)}
+  end
+
+  defp unverified_smart_contract_changeset(address_hash, params, error, error_message) do
+    attrs =
+      address_hash
+      |> build_final_attributes(params, params["abi"] || [])
+      |> Helper.add_contract_code_md5()
+
+    changeset =
+      SmartContract.invalid_contract_changeset(
+        %SmartContract{address_hash: address_hash},
+        attrs,
+        # The `error` itself might be a map, which is fine for the changeset.
+        error,
+        error_message,
+        true
+      )
+
+    # The action must be :insert for new unverified attempts
+    %{changeset | action: :insert}
+  end
+
+  #
+  # Attribute Builders and Helpers
+  #
+
+  defp build_final_attributes(address_hash, params, abi \\ []) do
+    %{
+      address_hash: address_hash,
+      name: params["name"],
+      file_path: params["file_path"],
+      compiler_version: params["compiler_version"],
+      evm_version: nil, # Not applicable for WASM contracts
+      optimization: false, # Not applicable
+      optimization_runs: nil, # Not applicable
+      contract_source_code: params["contract_source_code"],
+      constructor_arguments: nil, # Not applicable
+      external_libraries: [],
+      secondary_sources: params["secondary_sources"],
+      abi: abi,
+      verified_via_sourcify: false,
+      verified_via_eth_bytecode_db: false,
+      verified_via_verifier_alliance: false,
+      partially_verified: false,
+      autodetect_constructor_args: false,
+      compiler_settings: nil, # Richer data is in fluent_metadata
+      license_type: :none,
+      is_blueprint: false,
+      language: :solidity, # TODO: change to fluent_rust later
+      package_name: params["package_name"],
+      fluent_metadata: params["fluent_metadata"]
+    }
+  end
+
+  # Extracts rich metadata from the verification result for storage.
+  defp build_fluent_metadata(verification_result) do
+    Map.take(verification_result, [
+      "compile_settings",
+      "rustc_version",
+      "sdk_version",
+      "build_platform"
+    ])
+  end
+
+  # Finds the main source file (lib.rs or main.rs) from the list of source files.
   defp find_main_source_file(source_files) when is_map(source_files) do
-    # Priority order for main file
-    candidate_paths = [@default_file_name, "lib.rs", "src/lib.rs", "main.rs", "src/main.rs"]
+    # Priority order for the main file
+    candidate_paths = ["src/lib.rs", "lib.rs", "src/main.rs", "main.rs"]
 
-    Enum.find(candidate_paths, fn path ->
-      Map.has_key?(source_files, path)
-    end) || List.first(Map.keys(source_files)) || @default_file_name
+    Enum.find(candidate_paths, &Map.has_key?(source_files, &1)) ||
+      (source_files |> Map.keys() |> List.first())
   end
 
-  defp find_main_source_file(_), do: @default_file_name
+  defp find_main_source_file(_), do: nil
 
-  # Prepare secondary sources
+  # Prepares secondary source files (all files except the main one).
   defp prepare_secondary_sources(source_files, main_file_path, address_hash) when is_map(source_files) do
     source_files
     |> Enum.reject(fn {path, _content} -> path == main_file_path end)
@@ -151,91 +193,20 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
 
   defp prepare_secondary_sources(_, _, _), do: []
 
-  # Extract compiler version from metadata
-  defp get_compiler_version(build_metadata) do
-    get_in(build_metadata, ["compiler", "version"]) || ""
+  # Finds and returns the content of Cargo.toml.
+  defp find_cargo_toml_content(source_files) when is_map(source_files) do
+    Map.get(source_files, "Cargo.toml")
   end
 
-  # Extract package name from metadata
-  defp get_package_name(build_metadata) do
-    get_in(build_metadata, ["settings", "contract_info", "name"]) ||
-    get_in(build_metadata, ["settings", "contractInfo", "name"]) ||
-    ""
-  end
+  defp find_cargo_toml_content(_), do: nil
 
-  # Publish smart contract to database
-  defp publish_smart_contract(address_hash, params, abi) do
-    attrs = attributes(address_hash, params, abi)
-
-    ok_or_error = SmartContract.create_or_update_smart_contract(address_hash, attrs, false)
-
-    case ok_or_error do
-      {:ok, _} ->
-        Logger.info("Fluent smart-contract #{address_hash} successfully published")
-
-      {:error, error} ->
-        Logger.error("Fluent smart-contract #{address_hash} failed to publish: #{inspect(error)}")
+  # Parses the package name from the TOML content. A simple regex is sufficient.
+  defp parse_package_name_from_toml(toml_content) when is_binary(toml_content) do
+    case Regex.run(~r/^name\s*=\s*"([^"]+)"/m, toml_content) do
+      [_, name] -> name
+      _ -> nil
     end
-
-    ok_or_error
   end
 
-  # Create unverified smart contract changeset
-  defp unverified_smart_contract(address_hash, params, error, error_message, verification_with_files? \\ false) do
-    compiler_version = extract_compiler_version_from_params(params)
-
-    attrs =
-      address_hash
-      |> attributes(params |> Map.put("compiler_version", compiler_version))
-      |> Helper.add_contract_code_md5()
-
-    changeset =
-      SmartContract.invalid_contract_changeset(
-        %SmartContract{address_hash: address_hash},
-        attrs,
-        error,
-        error_message,
-        verification_with_files?
-      )
-
-    Logger.error("Fluent smart-contract verification #{address_hash} failed because of the error #{inspect(error)}")
-
-    %{changeset | action: :insert}
-  end
-
-  # Extract compiler version from params
-  defp extract_compiler_version_from_params(params) do
-    get_in(params, ["compile_settings", "rustc_version"]) ||
-    get_in(params, ["compile_settings", "rustcVersion"]) ||
-    ""
-  end
-
-  # Build attributes for smart contract
-  defp attributes(address_hash, params, abi \\ %{}) do
-    %{
-      address_hash: address_hash,
-      name: params["name"],
-      file_path: params["file_path"],
-      compiler_version: params["compiler_version"],
-      evm_version: nil,
-      optimization_runs: nil,
-      optimization: false,
-      contract_source_code: params["contract_source_code"],
-      constructor_arguments: nil,
-      external_libraries: [],
-      secondary_sources: params["secondary_sources"],
-      abi: abi,
-      verified_via_sourcify: false,
-      verified_via_eth_bytecode_db: false,
-      verified_via_verifier_alliance: false,
-      partially_verified: false,
-      autodetect_constructor_args: false,
-      compiler_settings: nil,
-      license_type: :none,
-      is_blueprint: false,
-      language: :solidity, # TODO(d1r1): should we change it to fluent_rust?
-      package_name: params["package_name"],
-      fluent_metadata: params["fluent_metadata"]
-    }
-  end
+  defp parse_package_name_from_toml(_), do: nil
 end

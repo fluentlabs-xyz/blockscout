@@ -15,7 +15,14 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
   alias Explorer.SmartContract.Stylus.PublisherWorker, as: StylusPublisherWorker
   alias Explorer.SmartContract.Vyper.PublisherWorker, as: VyperPublisherWorker
   alias Explorer.SmartContract.Fluent.PublisherWorker, as: FluentPublisherWorker
-  alias Explorer.SmartContract.{CompilerVersion, RustVerifierInterface, Solidity.CodeCompiler, StylusVerifierInterface, FluentVerifierInterface}
+
+  alias Explorer.SmartContract.{
+    CompilerVersion,
+    RustVerifierInterface,
+    Solidity.CodeCompiler,
+    StylusVerifierInterface,
+    FluentVerifierInterface
+  }
 
   action_fallback(BlockScoutWeb.API.V2.FallbackController)
 
@@ -74,7 +81,7 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
             else: &1
           )).()
       |> (&if(FluentVerifierInterface.enabled?(),
-            do: ["fluent-github-repository", "fluent-archive" | &1],
+            do: ["fluent" | &1],
             else: &1
           )).()
     end
@@ -378,57 +385,45 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
   end
 
   @doc """
-    Initiates verification of a Fluent smart contract using its Git repository source code.
+  Initiates verification of a Fluent smart contract.
 
-    Validates the request parameters and queues the verification job to be processed
-    asynchronously by the Fluent publisher worker.
+  This function handles verification for Fluent contracts from both Git
+  repositories and source code archives. It validates the unified request
+  payload and queues a single job type to be processed asynchronously by the
+  `FluentPublisherWorker`.
 
-    ## Parameters
-    - `conn`: The connection struct
-    - `params`: A map containing:
-      - `address_hash`: Contract address to verify
-      - `git_source`: Git source details
-        - `repository_url`: Git repository URL containing contract code
-        - `commit_reference`: Git commit hash, tag, or branch used for deployment
-        - `path_to_cargo_toml_in_repository`: Optional path to Cargo.toml in repository
-      - `compile_settings`: Compilation settings used for the original build
-        - `rustc_version`: Rust compiler version
-        - `fluentbase_sdk_version`: Fluentbase SDK version
-        - `target_triple`: Target triple for WASM compilation
-        - `profile`: Build profile (e.g., "release")
-        - `features`: List of enabled features
-        - `no_default_features`: Whether default features were disabled
-        - `cargo_flags`: Additional cargo build flags
+  ## Parameters
+  - `conn`: The connection struct.
+  - `params`: A map containing the full verification payload:
+    - `address_hash`: Contract address to verify.
+    - `contract_name`: The name of the contract.
+    - `abi`: The contract's ABI.
+    - `compile_settings`: Compilation settings.
+    - `git_source` (optional): Git source details.
+    - `archive_source` (optional): Archive source details.
 
-    ## Returns
-    - JSON response with:
-      - Success message if verification request is queued successfully
-      - Error message if:
-        - Fluent verification is not enabled
-        - Address format is invalid
-        - Contract is already verified
-        - Access is restricted
+  ## Returns
+  - A JSON response indicating that the verification has started, or an error.
   """
-  @spec verification_via_fluent_github_repository(Plug.Conn.t(), %{String.t() => any()}) ::
-          {:already_verified, true}
-          | {:format, :error}
-          | {:not_found, false | nil}
-          | {:restricted_access, true}
-          | Plug.Conn.t()
-  def verification_via_fluent_github_repository(
+  @spec verification_via_fluent(Plug.Conn.t(), %{String.t() => any()}) :: Plug.Conn.t()
+  def verification_via_fluent(
         conn,
         %{
           "address_hash" => address_hash_string,
-          "git_source" => _,
+          "contract_name" => _,
+          "abi" => _,
           "compile_settings" => _
         } = params
       ) do
-    Logger.info("API v2 fluent smart-contract #{address_hash_string} verification via git repository")
+    Logger.info("API v2: Fluent smart-contract #{address_hash_string} verification request received.")
 
     with {:not_found, true} <- {:not_found, FluentVerifierInterface.enabled?()},
-         :validated <- validate_address(params) do
+         :validated <- validate_address(params),
+         # Add specific validation for Fluent requests
+         :source_validated <- validate_fluent_source(params) do
+      # All checks passed, queue the unified job
       log_sc_verification_started(address_hash_string)
-      Que.add(FluentPublisherWorker, {"git_repository", params})
+      Que.add(FluentPublisherWorker, {"fluent", params})
 
       conn
       |> put_view(ApiView)
@@ -436,54 +431,20 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
     end
   end
 
-  @doc """
-    Initiates verification of a Fluent smart contract using source code archive.
+  # The old functions are now removed.
+  # def verification_via_fluent_github_repository(conn, params) ...
+  # def verification_via_fluent_archive(conn, params) ...
 
-    Validates the request parameters and queues the verification job to be processed
-    asynchronously by the Fluent publisher worker.
+  # New validation helper specific to Fluent verification requests.
+  defp validate_fluent_source(params) do
+    has_git_source = Map.has_key?(params, "git_source")
+    has_archive_source = Map.has_key?(params, "archive_source")
 
-    ## Parameters
-    - `conn`: The connection struct
-    - `params`: A map containing:
-      - `address_hash`: Contract address to verify
-      - `archive_source`: Archive source details
-        - `source_code_archive`: Base64 encoded archive content
-        - `path_to_cargo_toml_in_archive`: Path to Cargo.toml within archive
-      - `compile_settings`: Compilation settings used for the original build
-
-    ## Returns
-    - JSON response with:
-      - Success message if verification request is queued successfully
-      - Error message if:
-        - Fluent verification is not enabled
-        - Address format is invalid
-        - Contract is already verified
-        - Access is restricted
-  """
-  @spec verification_via_fluent_archive(Plug.Conn.t(), %{String.t() => any()}) ::
-          {:already_verified, true}
-          | {:format, :error}
-          | {:not_found, false | nil}
-          | {:restricted_access, true}
-          | Plug.Conn.t()
-  def verification_via_fluent_archive(
-        conn,
-        %{
-          "address_hash" => address_hash_string,
-          "archive_source" => _,
-          "compile_settings" => _
-        } = params
-      ) do
-    Logger.info("API v2 fluent smart-contract #{address_hash_string} verification via archive")
-
-    with {:not_found, true} <- {:not_found, FluentVerifierInterface.enabled?()},
-         :validated <- validate_address(params) do
-      log_sc_verification_started(address_hash_string)
-      Que.add(FluentPublisherWorker, {"archive", params})
-
-      conn
-      |> put_view(ApiView)
-      |> render(:message, %{message: @sc_verification_started})
+    case {has_git_source, has_archive_source} do
+      {true, false} -> :source_validated
+      {false, true} -> :source_validated
+      {true, true} -> {:error, "Request must contain either 'git_source' or 'archive_source', but not both."}
+      {false, false} -> {:error, "Request must contain either 'git_source' or 'archive_source'."}
     end
   end
 
