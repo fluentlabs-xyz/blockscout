@@ -65,8 +65,10 @@ defmodule BlockScoutWeb.Routers.SmartContractsApiV2Router do
 
     post("/standard-input", V2.VerificationController, :verification_via_standard_input)
 
-    post("/fluent-github-repository", V2.VerificationController, :verification_via_fluent_github_repository)
-    post("/fluent-archive", V2.VerificationController, :verification_via_fluent_archive)
+    @doc """
+    Handles verification requests for Fluent smart contracts.
+    """
+    post("/fluent", V2.VerificationController, :verification_via_fluent)
 
     if @chain_type !== :zksync do
       post("/flattened-code", V2.VerificationController, :verification_via_flattened_code)

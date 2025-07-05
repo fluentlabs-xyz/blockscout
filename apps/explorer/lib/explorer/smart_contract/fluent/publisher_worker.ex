@@ -1,12 +1,10 @@
 defmodule Explorer.SmartContract.Fluent.PublisherWorker do
   @moduledoc """
-  Processes Fluent smart contract verification requests asynchronously in the background.
+  Processes Fluent smart contract verification requests asynchronously.
 
-  This module implements a worker that handles verification of Fluent WASM smart contracts
-  through their Git repository or archive source code. It uses a job queue system to:
-  - Receive verification requests containing contract address and source details
-  - Delegate verification to the Publisher module
-  - Broadcast verification results through the events system
+  This worker handles verification of Fluent (WASM) smart contracts by taking a
+  unified verification request from the job queue, delegating it to the
+  `Explorer.SmartContract.Fluent.Publisher`, and broadcasting the result.
   """
 
   require Logger
@@ -17,49 +15,45 @@ defmodule Explorer.SmartContract.Fluent.PublisherWorker do
   alias Explorer.SmartContract.Fluent.Publisher
 
   @doc """
-  Processes a Fluent smart contract verification request from a Git repository.
+  Performs the verification task for a Fluent smart contract.
+
+  This function is the single entry point for the worker. It expects a unified
+  `params` map that contains all necessary information for verification,
+  including `address_hash`, `contract_name`, `abi`, source details, and
+  compile settings.
 
   ## Parameters
-  - `{"git_repository", params}`: Tuple containing verification source and parameters
+  - `{"fluent", params}`: A tuple where the second element is the map of
+    verification parameters.
 
   ## Returns
-  - Result of the broadcast operation
+  - The result of the broadcast operation.
   """
   @spec perform({binary(), %{String.t() => any()}}) :: any()
-  def perform({"git_repository", %{"address_hash" => address_hash} = params}) do
-    broadcast(:publish_git, address_hash, [address_hash, params])
+  def perform({"fluent", %{"address_hash" => address_hash} = params}) do
+    broadcast(address_hash, params)
   end
 
-  @doc """
-  Processes a Fluent smart contract verification request from a source archive.
-
-  ## Parameters
-  - `{"archive", params}`: Tuple containing verification source and parameters
-
-  ## Returns
-  - Result of the broadcast operation
-  """
-  def perform({"archive", %{"address_hash" => address_hash} = params}) do
-    broadcast(:publish_archive, address_hash, [address_hash, params])
-  end
-
-  # Broadcast verification results
-  defp broadcast(method, address_hash, args) do
+  # Broadcasts the verification result to the rest of the application.
+  defp broadcast(address_hash, params) do
+    # Call the single, unified publish function
     result =
-      case apply(Publisher, method, args) do
-        {:ok, _contract} = result ->
-          result
+      case Publisher.publish(address_hash, params) do
+        {:ok, _contract} = ok_result ->
+          ok_result
 
-        {:error, changeset} ->
+        {:error, changeset} = error_result ->
           Logger.error(
-            "Fluent smart-contract verification #{address_hash} failed because of the error: #{inspect(changeset)}"
+            "Fluent smart-contract verification for #{inspect(address_hash)} failed with changeset: #{inspect(changeset)}"
           )
-
-          {:error, changeset}
+          error_result
       end
 
-    Logger.info("Smart-contract #{address_hash} verification: broadcast verification results")
+    Logger.info("Broadcasting Fluent verification results for smart-contract #{inspect(address_hash)}.")
 
-    EventsPublisher.broadcast([{:contract_verification_result, {String.downcase(address_hash), result}}], :on_demand)
+    EventsPublisher.broadcast(
+      [{:contract_verification_result, {String.downcase(to_string(address_hash)), result}}],
+      :on_demand
+    )
   end
 end

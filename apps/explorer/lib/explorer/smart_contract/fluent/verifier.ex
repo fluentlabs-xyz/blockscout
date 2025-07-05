@@ -1,129 +1,108 @@
 defmodule Explorer.SmartContract.Fluent.Verifier do
   @moduledoc """
-  Verifies Fluent smart contracts by comparing their source code against deployed bytecode.
+  Verifies Fluent smart contracts by preparing data for the verification microservice.
 
-  This module handles verification of Fluent WASM smart contracts through their Git repository
-  or archive source code. It interfaces with a verification microservice that:
-  - Fetches source code from the specified Git repository or extracts from archive
-  - Compiles the code using the specified rustc and fluentbase-sdk versions
-  - Compares the resulting bytecode against the deployed contract bytecode
-  - Returns verification details including ABI and build metadata
+  This module handles the verification of Fluent (WASM) smart contracts.
+  It constructs the payload required by the `FluentVerifierInterface` by:
+  - Transforming the user-provided parameters to match the microservice's expected format.
+  - Fetching chain-specific data like `chain_id` and `rpc_endpoint`.
+  - Calling the unified verification function in the interface.
   """
   alias EthereumJSONRPC.Utility.CommonHelper
-  alias Explorer.Chain.{Hash, SmartContract}
+  alias Explorer.Chain.Hash
   alias Explorer.SmartContract.FluentVerifierInterface
 
   require Logger
 
   @doc """
-  Verifies a Fluent smart contract using Git repository source code.
-
-  ## Parameters
-  - `address_hash`: Contract address
-  - `params`: Map containing verification parameters
-
-  ## Returns
-  - `{:ok, map}` with verification details
-  - `{:error, any}` if verification fails or is disabled
+  Evaluates the authenticity of a Fluent smart contract.
   """
-  @spec evaluate_authenticity_git(EthereumJSONRPC.address() | Hash.Address.t(), map()) ::
+  @spec evaluate_authenticity(EthereumJSONRPC.address() | Hash.Address.t(), map()) ::
           {:ok, map()} | {:error, any()}
-  def evaluate_authenticity_git(address_hash, params) do
-    evaluate_authenticity_inner(:git, FluentVerifierInterface.enabled?(), address_hash, params)
+  def evaluate_authenticity(address_hash, params) do
+    if FluentVerifierInterface.enabled?() do
+      do_evaluate_authenticity(address_hash, params)
+    else
+      {:error, %{"message" => "Fluent verification is disabled."}}
+    end
   rescue
     exception ->
+      stacktrace = __STACKTRACE__
+
       Logger.error(fn ->
         [
-          "Error while verifying smart-contract address: #{address_hash}, params: #{inspect(params, limit: :infinity, printable_limit: :infinity)}: ",
-          Exception.format(:error, exception, __STACKTRACE__)
+          "Error during Fluent contract verification for address: #{inspect(address_hash)}\n",
+          "Params: #{inspect(params, limit: :infinity)}\n",
+          "Exception: #{Exception.format(:error, exception, stacktrace)}"
         ]
       end)
 
-      {:error, "Verification failed: #{Exception.message(exception)}"}
+      {:error, %{"message" => "Internal error during verification: #{Exception.message(exception)}"}}
   end
 
-  @doc """
-  Verifies a Fluent smart contract using source code archive.
-
-  ## Parameters
-  - `address_hash`: Contract address
-  - `params`: Map containing verification parameters
-
-  ## Returns
-  - `{:ok, map}` with verification details
-  - `{:error, any}` if verification fails or is disabled
-  """
-  @spec evaluate_authenticity_archive(EthereumJSONRPC.address() | Hash.Address.t(), map()) ::
-          {:ok, map()} | {:error, any()}
-  def evaluate_authenticity_archive(address_hash, params) do
-    evaluate_authenticity_inner(:archive, FluentVerifierInterface.enabled?(), address_hash, params)
-  rescue
-    exception ->
-      Logger.error(fn ->
-        [
-          "Error while verifying smart-contract address: #{address_hash}, params: #{inspect(params, limit: :infinity, printable_limit: :infinity)}: ",
-          Exception.format(:error, exception, __STACKTRACE__)
-        ]
-      end)
-
-      {:error, "Verification failed: #{Exception.message(exception)}"}
-  end
-
-  # Internal verification logic
-  @spec evaluate_authenticity_inner(:git | :archive, boolean(), EthereumJSONRPC.address() | Hash.Address.t(), map()) ::
-          {:ok, map()} | {:error, any()}
-  defp evaluate_authenticity_inner(:git, true, address_hash, params) do
-    chain_id = get_chain_id()
-    rpc_endpoint = CommonHelper.get_available_url()
-
+  defp do_evaluate_authenticity(address_hash, params) do
+    # Prepare the payload for the verification service.
+    # The user-facing API may have different field names than the microservice.
+    # This module is responsible for the translation.
     verification_params =
-      params
-      |> prepare_git_params()
-      |> Map.put("contract_address", to_string(address_hash))
-      |> Map.put("chain_id", to_string(chain_id))
-      |> Map.put("rpc_endpoint", rpc_endpoint)
+      %{
+        "contract_address" => to_string(address_hash),
+        "chain_id" => get_chain_id(),
+        "rpc_endpoint" => CommonHelper.get_available_url(),
+        "compile_settings" => transform_compile_settings(params["compile_settings"])
+      }
+      |> Map.merge(prepare_source_payload(params))
 
-    FluentVerifierInterface.verify_git_source(verification_params)
+    FluentVerifierInterface.verify_wasm(verification_params)
   end
 
-  defp evaluate_authenticity_inner(:archive, true, address_hash, params) do
-    chain_id = get_chain_id()
-    rpc_endpoint = CommonHelper.get_available_url()
+  # Selects the correct source type and transforms its keys to match the proto.
+  defp prepare_source_payload(params) do
+    cond do
+      git_source = params["git_source"] ->
+        %{"git_source" => transform_git_source(git_source)}
 
-    verification_params =
-      params
-      |> prepare_archive_params()
-      |> Map.put("contract_address", to_string(address_hash))
-      |> Map.put("chain_id", to_string(chain_id))
-      |> Map.put("rpc_endpoint", rpc_endpoint)
+      archive_source = params["archive_source"] ->
+        %{"archive_source" => transform_archive_source(archive_source)}
 
-    FluentVerifierInterface.verify_archive_source(verification_params)
+      true ->
+        # This case should be prevented by controller validation.
+        raise "Verification request must contain 'git_source' or 'archive_source'."
+    end
   end
 
-  defp evaluate_authenticity_inner(_source_type, false, _address_hash, _params) do
-    {:error, "Fluent verification is disabled"}
-  end
-
-  # Prepare Git parameters for verification
-  defp prepare_git_params(params) do
+  # Transforms user-facing git source params to the microservice format.
+  defp transform_git_source(git_source) do
     %{
-      "git_source" => params["git_source"],
-      "compile_settings" => params["compile_settings"]
+      "repository_url" => git_source["repository_url"],
+      # User sends `commit_reference`, microservice expects `commit_ref`.
+      "commit_ref" => git_source["commit_reference"],
+      # User might send `root` or `path_to_...`, microservice expects `project_path`.
+      "project_path" => git_source["root"] || git_source["path_to_cargo_toml_in_repository"] || "."
     }
   end
 
-  # Prepare archive parameters for verification
-  defp prepare_archive_params(params) do
+  # Transforms user-facing archive source params to the microservice format.
+  defp transform_archive_source(archive_source) do
     %{
-      "archive_source" => params["archive_source"],
-      "compile_settings" => params["compile_settings"]
+      "content" => archive_source["content"],
+      # User might send `root` or `path_to_...`, microservice expects `project_path`.
+      "project_path" => archive_source["root"] || archive_source["path_to_cargo_toml_in_archive"] || "."
     }
   end
 
-  # Get chain ID from configuration
+  # Transforms user-facing compile settings to the microservice format.
+  defp transform_compile_settings(settings) do
+    %{
+      "sdk_version" => settings["sdk_version"],
+      "features" => settings["features"] || [],
+      "no_default_features" => settings["no_default_features"] || false
+    }
+  end
+
   defp get_chain_id do
     Application.get_env(:block_scout_web, :chain_id) ||
-    Application.get_env(:explorer, :chain_id) ||
-    raise "Chain ID not configured"
+      Application.get_env(:explorer, :chain_id) ||
+      raise "Chain ID is not configured in Blockscout."
   end
 end
