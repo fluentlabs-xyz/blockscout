@@ -35,8 +35,7 @@ defmodule Explorer.Chain.SmartContract.Schema do
       @chain_type_fields quote(
                            do: [
                              field(:package_name, :string),
-                             field(:fluent_metadata, :map),
-                             field(:optimization_runs, :integer)
+                             field(:fluent_metadata, :map)
                            ]
                          )
 
@@ -208,15 +207,13 @@ defmodule Explorer.Chain.SmartContract do
     solidity: 1,
     vyper: 2,
     yul: 3,
+    fluent_rust: 4,
     geas: 5
   ]
 
   @chain_type_languages (case @chain_type do
                            :arbitrum ->
                              [stylus_rust: 4]
-
-                           :fluent ->
-                             ~w(fluent_rust)a
 
                            :zilliqa ->
                              [scilla: 4]

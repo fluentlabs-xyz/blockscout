@@ -151,7 +151,7 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
       compiler_settings: nil, # Richer data is in fluent_metadata
       license_type: :none,
       is_blueprint: false,
-      language: :solidity, # TODO: change to fluent_rust later
+      language: :fluent_rust,
       package_name: params["package_name"],
       fluent_metadata: params["fluent_metadata"]
     }
