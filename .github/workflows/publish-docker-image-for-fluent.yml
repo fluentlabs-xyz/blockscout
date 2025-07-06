@@ -1,0 +1,83 @@
+name: Fluent-Dev Publish Docker Image
+
+on:
+  push:
+    branches:
+      - 'feat/fluent-verifier'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build_and_publish:
+    name: Build and Push Docker Image to GHCR
+    runs-on: ubuntu-latest
+    
+    env:
+      IMAGE_REPO: ghcr.io/${{ github.repository_owner }}/blockscout-fluent-dev
+      RELEASE_VERSION: 8.1.1 
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Repo
+        id: setup
+        uses: ./.github/actions/setup-repo
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          docker-remote-multi-platform: true
+          docker-arm-host: ${{ secrets.ARM_RUNNER_HOSTNAME }}
+          docker-arm-host-key: ${{ secrets.ARM_RUNNER_KEY }}
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_REPO }}
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=,suffix=,event=branch
+            type=raw,value=latest,event=branch
+
+      - name: Build and Push All-In-One Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64/v8
+          build-args: |
+            BLOCKSCOUT_VERSION=v${{ env.RELEASE_VERSION }}.+commit.${{ steps.setup.outputs.short-sha }}
+            RELEASE_VERSION=${{ env.RELEASE_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and Push Indexer-Only Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}-indexer
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64/v8
+          build-args: |
+            DISABLE_API=true
+            BLOCKSCOUT_VERSION=v${{ env.RELEASE_VERSION }}.+commit.${{ steps.setup.outputs.short-sha }}
+            RELEASE_VERSION=${{ env.RELEASE_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
