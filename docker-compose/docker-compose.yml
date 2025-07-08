@@ -58,6 +58,7 @@ services:
       MICROSERVICE_FLUENT_VERIFIER_URL:
         http://fluent-verifier:8050
       DATABASE_URL: ${DATABASE_URL}
+    command: /bin/sh -c "sleep 600"
 
   visualizer:
     extends:
