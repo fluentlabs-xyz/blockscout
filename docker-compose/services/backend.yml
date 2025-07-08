@@ -13,8 +13,6 @@ services:
       - 'host.docker.internal:host-gateway'
     env_file:
       -  ../envs/common-blockscout.env
-    environments: 
-      - DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./logs/:/app/logs/
       - ./dets/:/app/dets/
