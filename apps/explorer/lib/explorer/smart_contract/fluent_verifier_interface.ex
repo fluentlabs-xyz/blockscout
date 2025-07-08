@@ -75,6 +75,20 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
     http_post_request(list_versions_url(), body)
   end
 
+
+  @doc """
+  Provides a backward-compatible wrapper for the old `get_versions_list/0` function.
+
+  This function delegates the call to the new `list_available_versions/1` function
+  with default parameters, ensuring that older parts of the application that
+  still rely on the old interface continue to work without modification.
+  """
+  @spec get_versions_list() :: {:ok, map()} | {:error, any()}
+  def get_versions_list() do
+    list_available_versions(false)
+  end
+
+
   @doc """
   Checks if the Fluent verifier microservice is enabled in the configuration.
   """
