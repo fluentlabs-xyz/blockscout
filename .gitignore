@@ -53,6 +53,8 @@ dump.rdb
 /docker-compose/services/redis-data
 /docker-compose/services/logs
 /docker-compose/tmp
+/docker-compose/envs/common-blockscout.env
+/docker-compose/envs/common-frontend.env
 
 .idea/
 *.iml
@@ -84,3 +86,4 @@ tasks_in_progress
 
 
 /.wake
+
