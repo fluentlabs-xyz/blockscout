@@ -3,6 +3,7 @@ version: '3.9'
 services:
   backend:
     image: ghcr.io/fluentlabs-xyz/blockscout-fluent-dev:latest
+
     pull_policy: always
     restart: always
     stop_grace_period: 5m
