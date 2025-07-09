@@ -31,12 +31,9 @@ services:
     environment:
       MICROSERVICE_FLUENT_VERIFIER_URL:
         http://fluent-verifier:8050
-        # ETHEREUM_JSONRPC_VARIANT: 'geth'
-        # CHAIN_ID: '20993'
-        # CHAIN_TYPE: ethereum
-    networks:
-      - default
-      - fluent_net
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: "4000"
+    # command: /bin/sh -c "sleep 600"
 
   visualizer:
     extends:
@@ -83,8 +80,6 @@ services:
     extends:
       file: ./services/user-ops-indexer.yml
       service: user-ops-indexer
-    networks:
-      - default
 
   proxy:
     depends_on:
@@ -94,8 +89,6 @@ services:
     extends:
       file: ./services/nginx.yml
       service: proxy
-    networks:
-      - default
 
   fluent-verifier:
     user: root
@@ -109,16 +102,5 @@ services:
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - RUST_LOG=info
-      - FLUENT_VERIFIER__DOCKER_API__NETWORK=developer-preview_default
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - default
-      - fluent_net
-
-networks:
-  default:
-    name: blockscout2_default
-  fluent_net:
-    name: developer-preview_default
-    external: true
