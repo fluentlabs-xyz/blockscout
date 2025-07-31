@@ -29,33 +29,8 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
   """
   @spec verify_wasm(map()) :: {:ok, map()} | {:error, map()}
   def verify_wasm(params) do
-    # Prepare the payload by conditionally processing the source.
-    # The `content` for an archive source comes Base64 encoded from the user.
-    # We must decode it to a binary string so the JSON library (Jason) can
-    # re-encode it correctly for the final HTTP request payload.
-    # This block is executed ONLY if the request is for an archive source.
-    processed_params =
-      if Map.has_key?(params, "archive_source") do
-        # This is an archive verification. Decode the content.
-        update_in(params, ["archive_source", "content"], fn
-          # Handle cases where content might be null or an empty string from the user.
-          nil ->
-            nil
 
-          "" ->
-            nil
-
-          base64_content when is_binary(base64_content) ->
-            # This is the main path: decode the Base64 string into raw bytes.
-            Base.decode64!(base64_content)
-        end)
-      else
-        # This is a git verification or another type of request.
-        # We don't need to modify the params, so we pass them through as is.
-        params
-      end
-
-    http_post_request(verify_wasm_url(), processed_params)
+    http_post_request(verify_wasm_url(), params)
   end
 
   @doc """
