@@ -16,3 +16,8 @@ services:
     volumes:
       - ./logs/:/app/logs/
       - ./dets/:/app/dets/
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
