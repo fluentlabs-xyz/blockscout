@@ -92,7 +92,7 @@ services:
 
   fluent-verifier:
     user: root
-    image: ghcr.io/fluentlabs-xyz/fluent-verifier:c5daa90c303892785f49cfdd9a42d147e22845cf
+    image: ghcr.io/fluentlabs-xyz/fluent-verifier:latest
     container_name: fluent-verifier
     platform: linux/amd64
     depends_on:
