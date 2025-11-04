@@ -135,11 +135,15 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
       name: params["name"],
       file_path: params["file_path"],
       compiler_version: params["compiler_version"],
-      evm_version: nil, # Not applicable for WASM contracts
-      optimization: false, # Not applicable
-      optimization_runs: nil, # Not applicable
+      # Not applicable for WASM contracts
+      evm_version: nil,
+      # Not applicable
+      optimization: false,
+      # Not applicable
+      optimization_runs: nil,
       contract_source_code: params["contract_source_code"],
-      constructor_arguments: nil, # Not applicable
+      # Not applicable
+      constructor_arguments: nil,
       external_libraries: [],
       secondary_sources: params["secondary_sources"],
       abi: abi,
@@ -148,7 +152,8 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
       verified_via_verifier_alliance: false,
       partially_verified: false,
       autodetect_constructor_args: false,
-      compiler_settings: nil, # Richer data is in fluent_metadata
+      # Richer data is in fluent_metadata
+      compiler_settings: nil,
       license_type: :none,
       is_blueprint: false,
       language: :fluent_rust,
@@ -173,7 +178,7 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
     candidate_paths = ["src/lib.rs", "lib.rs", "src/main.rs", "main.rs"]
 
     Enum.find(candidate_paths, &Map.has_key?(source_files, &1)) ||
-      (source_files |> Map.keys() |> List.first())
+      source_files |> Map.keys() |> List.first()
   end
 
   defp find_main_source_file(_), do: nil
