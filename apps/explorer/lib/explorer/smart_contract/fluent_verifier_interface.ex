@@ -29,7 +29,6 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
   """
   @spec verify_wasm(map()) :: {:ok, map()} | {:error, map()}
   def verify_wasm(params) do
-
     http_post_request(verify_wasm_url(), params)
   end
 
@@ -50,7 +49,6 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
     http_post_request(list_versions_url(), body)
   end
 
-
   @doc """
   Provides a backward-compatible wrapper for the old `get_versions_list/0` function.
 
@@ -62,7 +60,6 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
   def get_versions_list() do
     list_available_versions(false)
   end
-
 
   @doc """
   Checks if the Fluent verifier microservice is enabled in the configuration.
@@ -78,13 +75,15 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
 
   defp http_post_request(url, body) do
     headers = [{"Content-Type", "application/json"}]
-     Logger.info(fn ->
+
+    Logger.info(fn ->
       [
         "Attempting to send request to Fluent Verifier.",
         "\n  URL: #{url}",
         "\n  Request Body (Elixir map): #{inspect(body, pretty: true, limit: :infinity)}"
       ]
     end)
+
     encoded_body = Jason.encode!(body)
 
     case HTTPoison.post(url, encoded_body, headers, recv_timeout: @post_timeout) do

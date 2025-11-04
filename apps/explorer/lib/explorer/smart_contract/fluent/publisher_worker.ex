@@ -46,6 +46,7 @@ defmodule Explorer.SmartContract.Fluent.PublisherWorker do
           Logger.error(
             "Fluent smart-contract verification for #{inspect(address_hash)} failed with changeset: #{inspect(changeset)}"
           )
+
           error_result
       end
 

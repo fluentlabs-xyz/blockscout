@@ -7,6 +7,6 @@ defmodule Explorer.Repo.Migrations.AddFluentFields do
       add(:fluent_metadata, :jsonb, null: true)
     end
 
-    create index(:smart_contracts, [:package_name])
+    create(index(:smart_contracts, [:package_name]))
   end
 end
