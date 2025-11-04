@@ -887,6 +887,11 @@ config :indexer,
   internal_transactions_fetch_order:
     ConfigHelper.parse_catalog_value("INDEXER_INTERNAL_TRANSACTIONS_FETCH_ORDER", ["asc", "desc"], true, "asc")
 
+config :indexer, Indexer.Fetcher.ContractCode,
+  retry_attempts: ConfigHelper.parse_integer_env_var("INDEXER_CONTRACT_CODE_RETRY_ATTEMPTS", 3),
+  retry_delay_ms: ConfigHelper.parse_integer_env_var("INDEXER_CONTRACT_CODE_RETRY_DELAY_MS", 800)
+
+
 config :indexer, :ipfs,
   gateway_url: System.get_env("IPFS_GATEWAY_URL", "https://ipfs.io/ipfs"),
   gateway_url_param_key: System.get_env("IPFS_GATEWAY_URL_PARAM_KEY"),
