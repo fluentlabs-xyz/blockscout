@@ -180,16 +180,31 @@ defmodule Explorer.Chain.Import.Runner.Addresses do
   def insert(repo, ordered_changes_list, %{timeout: timeout, timestamps: timestamps} = options)
       when is_list(ordered_changes_list) do
     require Logger
+
+    caller_info =
+      case Process.info(self(), :current_stacktrace) do
+        {:current_stacktrace, stacktrace} ->
+          stacktrace
+          |> Enum.drop(1)
+          |> Enum.take(5)
+          |> Enum.map(fn
+            {mod, fun, arity, _loc} -> "#{inspect(mod)}.#{fun}/#{arity}"
+            _ -> "unknown"
+          end)
+
+        _ ->
+          ["no_stacktrace"]
+      end
+
     on_conflict = Map.get_lazy(options, :on_conflict, &default_on_conflict/0)
 
-    # Log what we're trying to insert
     contracts_to_insert =
       Enum.filter(ordered_changes_list, fn params ->
         params[:contract_code] && params[:contract_code] != "0x"
       end)
 
     if length(contracts_to_insert) > 0 do
-      Logger.info("BEFORE INSERT: #{length(contracts_to_insert)} contracts with code")
+      Logger.info("BEFORE INSERT: #{length(contracts_to_insert)} contracts, caller=#{inspect(caller_info)}")
 
       Enum.each(contracts_to_insert, fn params ->
         code_str = to_string(params[:contract_code])
@@ -209,7 +224,6 @@ defmodule Explorer.Chain.Import.Runner.Addresses do
         timestamps: timestamps
       )
 
-    # Log what actually got inserted
     case result do
       {:ok, addresses} ->
         saved_contracts = Enum.filter(addresses, fn addr -> addr.contract_code end)
@@ -227,7 +241,7 @@ defmodule Explorer.Chain.Import.Runner.Addresses do
               Logger.info("  #{addr.hash}: was=#{original_len}, now=#{code_len}")
 
               if code_len == 0 && original_len > 10 do
-                Logger.error("CODE LOST: #{addr.hash} had #{original_len} bytes, now has 0")
+                Logger.error("CODE LOST: #{addr.hash}, was=#{original_len}, now=0, caller=#{inspect(caller_info)}")
               end
             else
               Logger.warning("Address not in result: #{original[:hash]}")
