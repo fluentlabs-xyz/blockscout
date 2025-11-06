@@ -186,7 +186,7 @@ defmodule Explorer.Chain.Import.Runner.Addresses do
         {:current_stacktrace, stacktrace} ->
           stacktrace
           |> Enum.drop(1)
-          |> Enum.take(5)
+          |> Enum.take(20)
           |> Enum.map(fn
             {mod, fun, arity, _loc} -> "#{inspect(mod)}.#{fun}/#{arity}"
             _ -> "unknown"
