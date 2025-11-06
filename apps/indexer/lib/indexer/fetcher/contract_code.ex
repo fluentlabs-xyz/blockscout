@@ -309,11 +309,17 @@ defmodule Indexer.Fetcher.ContractCode do
   @spec import_addresses([Address.t()]) ::
           {:ok, [Address.t()]} | {:error, any()}
   defp import_addresses(addresses_params) do
+    Logger.debug("Importing #{length(addresses_params)} addresses")
+    Logger.debug("Sample addresses to import: #{inspect(Enum.take(addresses_params, 3))}")
+
     case Chain.import(%{
            addresses: %{params: addresses_params},
            timeout: :infinity
          }) do
       {:ok, %{addresses: addresses}} ->
+        Logger.debug("Successfully imported #{length(addresses)} addresses")
+        Logger.debug("Sample imported: #{inspect(Enum.take(addresses, 3), limit: :infinity)}")
+
         Accounts.drop(addresses)
         {:ok, addresses}
 
