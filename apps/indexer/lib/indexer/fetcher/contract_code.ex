@@ -175,39 +175,63 @@ defmodule Indexer.Fetcher.ContractCode do
     config = Application.get_env(:indexer, __MODULE__, [])
     max_attempts = Keyword.get(config, :retry_attempts, 5)
     delay_ms = Keyword.get(config, :retry_delay_ms, 800)
+
+    Logger.debug(
+      "fetch_contract_codes_with_retry: entries=#{length(entries)}, max_attempts=#{max_attempts}, delay=#{delay_ms}"
+    )
+
     do_retry(entries, json_rpc_args, max_attempts, delay_ms, _attempt = 1)
   end
 
   defp do_retry(entries, json_rpc_args, max_attempts, delay_ms, attempt) do
+    Logger.debug("do_retry: attempt #{attempt}/#{max_attempts}, entries=#{length(entries)}")
+
     case fetch_contract_codes(entries, json_rpc_args) do
       {:ok, addresses} ->
+        Logger.debug("fetch_contract_codes returned #{length(addresses)} addresses")
+
         {valid, empty} = Enum.split_with(addresses, &has_code?/1)
+        Logger.info("Split result: valid=#{length(valid)}, empty=#{length(empty)}")
+
         handle_fetch_result(valid, empty, entries, json_rpc_args, max_attempts, delay_ms, attempt)
 
       error ->
+        Logger.error("fetch_contract_codes failed: #{inspect(error)}")
         error
     end
   end
 
   defp handle_fetch_result(valid, [], _entries, _json_rpc_args, _max_attempts, _delay_ms, _attempt) do
+    Logger.debug("All codes fetched successfully")
     {:ok, valid}
   end
 
   defp handle_fetch_result(valid, empty, _entries, _json_rpc_args, max_attempts, _delay_ms, attempt)
        when attempt >= max_attempts do
     Logger.warning("#{length(empty)} contracts still empty after #{max_attempts} attempts")
+    Logger.warning("Empty addresses: #{inspect(Enum.map(empty, & &1.hash))}")
+
     {:ok, valid ++ empty}
   end
 
   defp handle_fetch_result(valid, empty, entries, json_rpc_args, max_attempts, delay_ms, attempt) do
     Logger.info("Retrying #{length(empty)} empty contracts (attempt #{attempt + 1}/#{max_attempts})")
+    Logger.debug("Empty addresses: #{inspect(Enum.map(empty, & &1.hash))}")
+
     Process.sleep(delay_ms)
 
     retry_entries = entries_for_addresses(entries, empty)
 
+    Logger.debug("Retry entries prepared: #{length(retry_entries)}")
+
     case do_retry(retry_entries, json_rpc_args, max_attempts, delay_ms, attempt + 1) do
-      {:ok, retried} -> {:ok, valid ++ retried}
-      error -> error
+      {:ok, retried} ->
+        Logger.debug("Retry succeeded, merging #{length(retried)} results")
+        {:ok, valid ++ retried}
+
+      error ->
+        Logger.error("Retry failed: #{inspect(error)}")
+        error
     end
   end
 
@@ -226,20 +250,28 @@ defmodule Indexer.Fetcher.ContractCode do
   defp fetch_contract_codes([], _), do: {:ok, []}
 
   defp fetch_contract_codes(entries, json_rpc_args) do
+    Logger.debug("fetch_contract_codes: fetching #{length(entries)} entries")
+
     entries
     |> RangesHelper.filter_traceable_block_numbers()
+    |> tap(fn filtered -> Logger.debug("After filter: #{length(filtered)} entries") end)
     |> Enum.map(
       &%{
         block_quantity: integer_to_quantity(&1.block_number),
         address: to_string(&1.created_contract_address_hash)
       }
     )
+    |> tap(fn params -> Logger.debug("Prepared RPC params for #{length(params)} addresses") end)
     |> EthereumJSONRPC.fetch_codes(json_rpc_args)
     |> case do
       {:ok, %{params_list: params, errors: []}} ->
-        {:ok, Addresses.extract_addresses(%{codes: params})}
+        codes = Addresses.extract_addresses(%{codes: params})
+        Logger.debug("RPC returned #{length(codes)} codes")
+        Logger.debug("Sample codes: #{inspect(Enum.take(codes, 2))}")
+        {:ok, codes}
 
       error ->
+        Logger.error("RPC fetch_codes failed: #{inspect(error)}")
         error
     end
   end
