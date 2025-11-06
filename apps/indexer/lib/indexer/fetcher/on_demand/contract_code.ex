@@ -23,12 +23,24 @@ defmodule Indexer.Fetcher.OnDemand.ContractCode do
 
   @spec trigger_fetch(String.t() | nil, Address.t()) :: :ok
   def trigger_fetch(caller \\ nil, address) do
+    Logger.metadata(fetcher: :code, application: :indexer)
+
+    Logger.info(
+      "[OnDemand] trigger_fetch called: address=#{address.hash}, has_code=#{!is_nil(address.contract_code)}, caller=#{inspect(caller)}"
+    )
+
     if is_nil(address.contract_code) or Address.eoa_with_code?(address) do
       case RateLimiter.check_rate(caller, :on_demand) do
-        :allow -> GenServer.cast(__MODULE__, {:fetch, address})
-        :deny -> :ok
+        :allow ->
+          Logger.info("[OnDemand] Rate limiter ALLOWED: address=#{address.hash}")
+          GenServer.cast(__MODULE__, {:fetch, address})
+
+        :deny ->
+          Logger.info("[OnDemand] Rate limiter DENIED: address=#{address.hash}")
+          :ok
       end
     else
+      Logger.info("[OnDemand] Has code, triggering ContractCreator: address=#{address.hash}")
       ContractCreatorOnDemand.trigger_fetch(address)
     end
   end
@@ -69,6 +81,8 @@ defmodule Indexer.Fetcher.OnDemand.ContractCode do
           json_rpc_named_arguments: EthereumJSONRPC.json_rpc_named_arguments()
         }) :: {:ok, String.t() | nil} | :error
   defp fetch_contract_code(address, state) do
+    Logger.metadata(fetcher: :code, application: :indexer)
+
     with {:need_to_fetch, true} <- {:need_to_fetch, fetch?(address)},
          {:retries_number, {retries_number, updated_at}} <-
            {:retries_number, AddressContractCodeFetchAttempt.get_retries_number(address.hash)},
@@ -77,12 +91,14 @@ defmodule Indexer.Fetcher.OnDemand.ContractCode do
            {:retry,
             Helper.current_time() - updated_at_ms >
               threshold(retries_number)} do
+      Logger.info("[OnDemand] Proceeding to fetch: address=#{address.hash}, retries=#{retries_number}")
       fetch_and_broadcast_bytecode(address, state)
     else
       {:need_to_fetch, false} ->
         :error
 
       {:retries_number, nil} ->
+        Logger.info("[OnDemand] First attempt: address=#{address.hash}")
         fetch_and_broadcast_bytecode(address, state)
 
       {:retry, false} ->
@@ -119,6 +135,9 @@ defmodule Indexer.Fetcher.OnDemand.ContractCode do
           json_rpc_named_arguments: EthereumJSONRPC.json_rpc_named_arguments()
         }) :: {:ok, String.t() | nil} | :error
   defp fetch_and_broadcast_bytecode(address, %{json_rpc_named_arguments: _} = state) do
+    Logger.metadata(fetcher: :code, application: :indexer)
+    Logger.info("[OnDemand] Fetching from node: address=#{address.hash}")
+
     with {:fetched_code, {:ok, %EthereumJSONRPC.FetchedCodes{params_list: fetched_codes}}} <-
            {:fetched_code,
             fetch_codes(
@@ -165,6 +184,7 @@ defmodule Indexer.Fetcher.OnDemand.ContractCode do
         :error
 
       _ ->
+        Logger.info("[OnDemand] Incrementing retry counter: address=#{address.hash}")
         AddressContractCodeFetchAttempt.insert_retries_number(address.hash)
         :error
     end
@@ -181,6 +201,7 @@ defmodule Indexer.Fetcher.OnDemand.ContractCode do
 
   @impl true
   def handle_cast({:fetch, address}, state) do
+    Logger.metadata(fetcher: :code, application: :indexer)
     fetch_contract_code(address, state)
 
     {:noreply, state}
