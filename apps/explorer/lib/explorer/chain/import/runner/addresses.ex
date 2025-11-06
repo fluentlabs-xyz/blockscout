@@ -193,7 +193,7 @@ defmodule Explorer.Chain.Import.Runner.Addresses do
 
       Enum.each(contracts_to_insert, fn params ->
         code_str = to_string(params[:contract_code])
-        Logger.debug("  #{params[:hash]}: len=#{String.length(code_str)}, prefix=#{String.slice(code_str, 0, 10)}")
+        Logger.info("  #{params[:hash]}: len=#{String.length(code_str)}, prefix=#{String.slice(code_str, 0, 10)}")
       end)
     end
 
@@ -224,7 +224,7 @@ defmodule Explorer.Chain.Import.Runner.Addresses do
               code_len = if addr.contract_code, do: byte_size(addr.contract_code.bytes), else: 0
               original_len = String.length(to_string(original[:contract_code]))
 
-              Logger.debug("  #{addr.hash}: was=#{original_len}, now=#{code_len}")
+              Logger.info("  #{addr.hash}: was=#{original_len}, now=#{code_len}")
 
               if code_len == 0 && original_len > 10 do
                 Logger.error("CODE LOST: #{addr.hash} had #{original_len} bytes, now has 0")
