@@ -39,6 +39,7 @@ config :logger,
     {LoggerFileBackend, :block_import_timings},
     {LoggerFileBackend, :account},
     {LoggerFileBackend, :api_v2},
+    {LoggerFileBackend, :contract_code},
     LoggerJSON
   ]
 

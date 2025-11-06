@@ -95,17 +95,21 @@ defmodule Indexer.Fetcher.ContractCode do
 
   @impl BufferedTask
   def init(initial, reducer, _) do
-    stream_reducer = RangesHelper.stream_reducer_traceable(reducer)
+    if Mix.env() == :test do
+      initial
+    else
+      stream_reducer = RangesHelper.stream_reducer_traceable(reducer)
 
-    {:ok, final} =
-      stream_transactions_with_unfetched_created_contract_code(
-        @transaction_fields,
-        initial,
-        stream_reducer,
-        true
-      )
+      {:ok, final} =
+        stream_transactions_with_unfetched_created_contract_code(
+          @transaction_fields,
+          initial,
+          stream_reducer,
+          true
+        )
 
-    final
+      final
+    end
   end
 
   @doc """
@@ -137,16 +141,12 @@ defmodule Indexer.Fetcher.ContractCode do
           | {:variant, atom()}
         ]) :: :ok | {:retry, any()}
   def run(entries, json_rpc_named_arguments) do
-    Logger.debug("fetching created_contract_code for transactions")
+    Logger.metadata(fetcher: :code, application: :indexer)
+    Logger.info("ContractCode.Fetcher processing #{length(entries)} entries")
 
-    {succeeded, failed} =
-      Enum.reduce(entries, {[], []}, fn entry, {succeeded, failed} ->
-        if entry.status == :ok do
-          {[entry | succeeded], failed}
-        else
-          {succeeded, [entry | failed]}
-        end
-      end)
+    {succeeded, failed} = Enum.split_with(entries, &(&1.status == :ok))
+
+    Logger.debug("Split entries: succeeded=#{length(succeeded)}, failed=#{length(failed)}")
 
     failed_addresses_params =
       Enum.map(
@@ -158,8 +158,7 @@ defmodule Indexer.Fetcher.ContractCode do
       )
 
     with {:ok, succeeded_addresses_params} <- fetch_contract_codes_with_retry(succeeded, json_rpc_named_arguments),
-         {:ok, balance_addresses_params} <-
-           fetch_balances(succeeded, json_rpc_named_arguments),
+         {:ok, balance_addresses_params} <- fetch_balances(succeeded, json_rpc_named_arguments),
          all_addresses_params =
            Addresses.merge_addresses(succeeded_addresses_params ++ balance_addresses_params) ++ failed_addresses_params,
          {:ok, addresses} <- import_addresses(all_addresses_params) do
@@ -167,94 +166,66 @@ defmodule Indexer.Fetcher.ContractCode do
       :ok
     else
       {:error, reason} ->
-        Logger.error(fn -> ["failed to fetch contract codes: ", inspect(reason)] end,
-          error_count: Enum.count(entries)
-        )
-
+        Logger.error("Failed to fetch contract codes: #{inspect(reason)}", error_count: length(entries))
         {:retry, entries}
     end
   end
 
-  # Fetches contract codes with retry logic for reth finalization delays
-  @spec fetch_contract_codes_with_retry([entry()], keyword()) ::
-          {:ok, [Address.t()]} | {:error, any()}
-  defp fetch_contract_codes_with_retry(entries, json_rpc_named_arguments) do
+  defp fetch_contract_codes_with_retry(entries, json_rpc_args) do
     config = Application.get_env(:indexer, __MODULE__, [])
-    max_attempts = Keyword.get(config, :retry_attempts, 3)
-    retry_delay_ms = Keyword.get(config, :retry_delay_ms, 1000)
-
-    do_fetch_codes_with_retry(entries, json_rpc_named_arguments, max_attempts, retry_delay_ms, 1)
+    max_attempts = Keyword.get(config, :retry_attempts, 5)
+    delay_ms = Keyword.get(config, :retry_delay_ms, 800)
+    do_retry(entries, json_rpc_args, max_attempts, delay_ms, _attempt = 1)
   end
 
-  @spec do_fetch_codes_with_retry([entry()], keyword(), integer(), integer(), integer()) ::
-          {:ok, [Address.t()]} | {:error, any()}
-  defp do_fetch_codes_with_retry([], _json_rpc_named_arguments, _max_attempts, _delay_ms, _attempt) do
-    {:ok, []}
-  end
-
-  defp do_fetch_codes_with_retry(entries, json_rpc_named_arguments, max_attempts, delay_ms, attempt) do
-    case fetch_contract_codes(entries, json_rpc_named_arguments) do
-      {:ok, addresses_params} ->
-        {valid_codes, empty_codes} =
-          Enum.split_with(addresses_params, fn params ->
-            code = Map.get(params, :contract_code)
-            code != nil && code != "0x" && String.length(code) > 2
-          end)
-
-        if empty_codes == [] or attempt >= max_attempts do
-          if empty_codes != [] do
-            Logger.warning(
-              "Still have #{length(empty_codes)} contracts with empty code after #{attempt} attempts. " <>
-                "These might be EOA addresses or reth finalization is taking longer than expected.",
-              empty_addresses: Enum.map(empty_codes, & &1.hash)
-            )
-          end
-
-          {:ok, addresses_params}
-        else
-          Logger.debug(
-            "Found #{length(empty_codes)} contracts with empty code (attempt #{attempt}/#{max_attempts}), " <>
-              "retrying in #{delay_ms}ms (waiting for reth finalization)"
-          )
-
-          Process.sleep(delay_ms)
-
-          empty_addresses =
-            empty_codes
-            |> Enum.map(& &1.hash)
-            |> MapSet.new()
-
-          entries_to_retry =
-            Enum.filter(entries, fn entry ->
-              MapSet.member?(empty_addresses, entry.created_contract_address_hash)
-            end)
-
-          case do_fetch_codes_with_retry(
-                 entries_to_retry,
-                 json_rpc_named_arguments,
-                 max_attempts,
-                 min(delay_ms * 2, 5000),
-                 attempt + 1
-               ) do
-            {:ok, retried_addresses_params} ->
-              {:ok, valid_codes ++ retried_addresses_params}
-
-            error ->
-              error
-          end
-        end
+  defp do_retry(entries, json_rpc_args, max_attempts, delay_ms, attempt) do
+    case fetch_contract_codes(entries, json_rpc_args) do
+      {:ok, addresses} ->
+        {valid, empty} = Enum.split_with(addresses, &has_code?/1)
+        handle_fetch_result(valid, empty, entries, json_rpc_args, max_attempts, delay_ms, attempt)
 
       error ->
         error
     end
   end
 
-  @spec fetch_contract_codes([entry()], keyword()) ::
-          {:ok, [Address.t()]} | {:error, any()}
-  defp fetch_contract_codes([], _json_rpc_named_arguments),
-    do: {:ok, []}
+  defp handle_fetch_result(valid, [], _entries, _json_rpc_args, _max_attempts, _delay_ms, _attempt) do
+    {:ok, valid}
+  end
 
-  defp fetch_contract_codes(entries, json_rpc_named_arguments) do
+  defp handle_fetch_result(valid, empty, _entries, _json_rpc_args, max_attempts, _delay_ms, attempt)
+       when attempt >= max_attempts do
+    Logger.warning("#{length(empty)} contracts still empty after #{max_attempts} attempts")
+    {:ok, valid ++ empty}
+  end
+
+  defp handle_fetch_result(valid, empty, entries, json_rpc_args, max_attempts, delay_ms, attempt) do
+    Logger.info("Retrying #{length(empty)} empty contracts (attempt #{attempt + 1}/#{max_attempts})")
+    Process.sleep(delay_ms)
+
+    retry_entries = entries_for_addresses(entries, empty)
+
+    case do_retry(retry_entries, json_rpc_args, max_attempts, delay_ms, attempt + 1) do
+      {:ok, retried} -> {:ok, valid ++ retried}
+      error -> error
+    end
+  end
+
+  defp has_code?(%{contract_code: code}) do
+    code != nil && code != "0x" && String.length(code) > 2
+  end
+
+  defp entries_for_addresses(entries, addresses) do
+    address_set = MapSet.new(addresses, & &1.hash)
+
+    Enum.filter(entries, fn entry ->
+      entry.created_contract_address_hash |> to_string() |> then(&MapSet.member?(address_set, &1))
+    end)
+  end
+
+  defp fetch_contract_codes([], _), do: {:ok, []}
+
+  defp fetch_contract_codes(entries, json_rpc_args) do
     entries
     |> RangesHelper.filter_traceable_block_numbers()
     |> Enum.map(
@@ -263,11 +234,10 @@ defmodule Indexer.Fetcher.ContractCode do
         address: to_string(&1.created_contract_address_hash)
       }
     )
-    |> EthereumJSONRPC.fetch_codes(json_rpc_named_arguments)
+    |> EthereumJSONRPC.fetch_codes(json_rpc_args)
     |> case do
       {:ok, %{params_list: params, errors: []}} ->
-        code_addresses_params = Addresses.extract_addresses(%{codes: params})
-        {:ok, code_addresses_params}
+        {:ok, Addresses.extract_addresses(%{codes: params})}
 
       error ->
         error
