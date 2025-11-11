@@ -196,14 +196,10 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
     end)
   end
 
-  defp prepare_secondary_sources(_, _, _), do: []
-
   # Finds and returns the content of Cargo.toml.
   defp find_cargo_toml_content(source_files) when is_map(source_files) do
     Map.get(source_files, "Cargo.toml")
   end
-
-  defp find_cargo_toml_content(_), do: nil
 
   # Parses the package name from the TOML content. A simple regex is sufficient.
   defp parse_package_name_from_toml(toml_content) when is_binary(toml_content) do
@@ -212,6 +208,4 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
       _ -> nil
     end
   end
-
-  defp parse_package_name_from_toml(_), do: nil
 end

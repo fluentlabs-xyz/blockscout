@@ -12,5 +12,10 @@
     ~r/lib\/phoenix\/router.ex/,
     {"lib/explorer/chain/search.ex", :pattern_match, 100},
     {"lib/explorer/chain/search.ex", :pattern_match, 282},
-    {"lib/explorer/chain/search.ex", :pattern_match, 379}
+    {"lib/explorer/chain/search.ex", :pattern_match, 379},
+    # Fluent worker - Que.Worker macro generates unreachable code
+    {"lib/explorer/smart_contract/fluent/publisher_worker.ex", :pattern_match, 1},
+    {"lib/explorer/smart_contract/fluent/publisher_worker.ex", :exact_eq, 12},
+    {"lib/explorer/smart_contract/fluent/publisher_worker.ex", :pattern_match, 12},
+
 ]

@@ -24,6 +24,8 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
     FluentVerifierInterface
   }
 
+  alias Indexer.Fetcher.OnDemand.ContractCode
+
   action_fallback(BlockScoutWeb.API.V2.FallbackController)
 
   @api_true [api?: true]
@@ -418,10 +420,8 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
     Logger.info("API v2: Fluent smart-contract #{address_hash_string} verification request received.")
 
     with {:not_found, true} <- {:not_found, FluentVerifierInterface.enabled?()},
-         :validated <- validate_address(params),
-         # Add specific validation for Fluent requests
+         :validated <- validate_address(conn, params),
          :source_validated <- validate_fluent_source(params) do
-      # All checks passed, queue the unified job
       log_sc_verification_started(address_hash_string)
       Que.add(FluentPublisherWorker, {"fluent", params})
 
