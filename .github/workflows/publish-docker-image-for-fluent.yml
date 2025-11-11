@@ -1,4 +1,4 @@
-name: Publish Fluent-Dev Backend Docker Image
+name: Publish Blockscout Backend Docker Image
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/fluentlabs-xyz/blockscout-fluent-dev
+          images: ghcr.io/fluentlabs-xyz/blockscout-backend
           tags: |
             type=ref,event=tag
             type=sha,prefix=,suffix=,event=branch
@@ -56,7 +56,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BLOCKSCOUT_VERSION=v8.1.1.+commit.${{ env.SHORT_SHA }}
-            RELEASE_VERSION=8.1.1
+            BLOCKSCOUT_VERSION=v9.2.2.+commit.${{ env.SHORT_SHA }}
+            RELEASE_VERSION=9.2.2
           cache-from: type=gha
           cache-to: type=gha,mode=max
