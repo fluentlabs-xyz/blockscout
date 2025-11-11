@@ -480,7 +480,7 @@ defmodule Indexer.Block.Fetcher do
   def async_import_realtime_coin_balances(_), do: :ok
 
   def async_import_created_contract_codes(%{transactions: transactions}, realtime?) do
-    ContractCode.async_fetch(transactions, realtime?, 30_000)
+    ContractCode.async_fetch(transactions, realtime?, 10_000)
   end
 
   def async_import_created_contract_codes(_, _), do: :ok
