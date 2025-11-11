@@ -139,44 +139,6 @@ defmodule Explorer.Chain.Import do
   """
   # @spec all(all_options()) :: all_result()
   def all(options) when is_map(options) do
-    Logger.info("Chain.import called")
-
-    caller_info =
-      case Process.info(self(), :current_stacktrace) do
-        {:current_stacktrace, stacktrace} ->
-          stacktrace
-          |> Enum.drop(1)
-          |> Enum.take(15)
-          |> Enum.map(fn
-            {mod, fun, arity, _loc} -> "#{inspect(mod)}.#{fun}/#{arity}"
-            _ -> "unknown"
-          end)
-
-        _ ->
-          ["no_stacktrace"]
-      end
-
-    has_addresses = Map.has_key?(options, :addresses)
-
-    has_code =
-      has_addresses &&
-        Enum.any?(
-          Map.get(options, :addresses, %{}) |> Map.get(:params, []),
-          fn p -> p[:contract_code] && p[:contract_code] != "0x" end
-        )
-
-    if has_code do
-      code_count =
-        Enum.count(
-          Map.get(options, :addresses, %{}) |> Map.get(:params, []),
-          fn p -> p[:contract_code] end
-        )
-
-      Logger.warning(
-        "Chain.import called with #{code_count} addresses having contract_code, caller=#{inspect(caller_info)}"
-      )
-    end
-
     with {:ok, runner_options_pairs} <- validate_options(options),
          {:ok, valid_runner_option_pairs} <- validate_runner_options_pairs(runner_options_pairs),
          {:ok, runner_to_changes_list} <- runner_to_changes_list(valid_runner_option_pairs),

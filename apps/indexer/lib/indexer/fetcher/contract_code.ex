@@ -183,7 +183,7 @@ defmodule Indexer.Fetcher.ContractCode do
       {:ok, addresses} ->
         {has_code, empty_code} = Enum.split_with(addresses, &has_code?/1)
 
-        Logger.info("Retry attempt #{attempt}: has_code=#{length(has_code)}, empty_code=#{length(empty_code)}")
+        Logger.debug("Retry attempt #{attempt}: has_code=#{length(has_code)}, empty_code=#{length(empty_code)}")
 
         handle_fetch_result(has_code, empty_code, entries, json_rpc_args, max_attempts, delay_ms, attempt)
 
@@ -297,42 +297,11 @@ defmodule Indexer.Fetcher.ContractCode do
   @spec import_addresses([Address.t()]) ::
           {:ok, [Address.t()]} | {:error, any()}
   defp import_addresses(addresses_params) do
-    Logger.info("Importing #{length(addresses_params)} addresses")
-
-    Enum.each(addresses_params, fn params ->
-      if params[:contract_code] do
-        code_len = String.length(to_string(params[:contract_code]))
-        prefix = String.slice(to_string(params[:contract_code]), 0, min(10, code_len))
-        Logger.debug("Import params: address=#{params[:hash]}, len=#{code_len}, prefix=#{prefix}")
-      end
-    end)
-
     case Chain.import(%{
            addresses: %{params: addresses_params},
            timeout: :infinity
          }) do
       {:ok, %{addresses: addresses}} ->
-        Logger.info("Successfully imported #{length(addresses)} addresses")
-
-        Enum.each(addresses, fn addr ->
-          if addr.contract_code do
-            code_len = byte_size(addr.contract_code.bytes)
-            prefix_bytes = binary_part(addr.contract_code.bytes, 0, min(4, code_len))
-            prefix_hex = "0x" <> Base.encode16(prefix_bytes, case: :lower)
-            Logger.debug("Saved in DB: address=#{addr.hash}, len=#{code_len}, prefix=#{prefix_hex}")
-
-            original = Enum.find(addresses_params, &(to_string(&1[:hash]) == to_string(addr.hash)))
-
-            if original && original[:contract_code] do
-              original_len = String.length(to_string(original[:contract_code]))
-
-              if code_len == 0 && original_len > 10 do
-                Logger.error("CODE LOST: address=#{addr.hash}, was=#{original_len}, now=#{code_len}")
-              end
-            end
-          end
-        end)
-
         Accounts.drop(addresses)
         {:ok, addresses}
 

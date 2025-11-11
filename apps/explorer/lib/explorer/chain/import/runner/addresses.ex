@@ -179,82 +179,18 @@ defmodule Explorer.Chain.Import.Runner.Addresses do
         }) :: {:ok, [Address.t()]}
   def insert(repo, ordered_changes_list, %{timeout: timeout, timestamps: timestamps} = options)
       when is_list(ordered_changes_list) do
-    require Logger
-
-    caller_info =
-      case Process.info(self(), :current_stacktrace) do
-        {:current_stacktrace, stacktrace} ->
-          stacktrace
-          |> Enum.drop(1)
-          |> Enum.take(20)
-          |> Enum.map(fn
-            {mod, fun, arity, _loc} -> "#{inspect(mod)}.#{fun}/#{arity}"
-            _ -> "unknown"
-          end)
-
-        _ ->
-          ["no_stacktrace"]
-      end
-
     on_conflict = Map.get_lazy(options, :on_conflict, &default_on_conflict/0)
 
-    contracts_to_insert =
-      Enum.filter(ordered_changes_list, fn params ->
-        params[:contract_code] && params[:contract_code] != "0x"
-      end)
-
-    if length(contracts_to_insert) > 0 do
-      Logger.info("BEFORE INSERT: #{length(contracts_to_insert)} contracts, caller=#{inspect(caller_info)}")
-
-      Enum.each(contracts_to_insert, fn params ->
-        code_str = to_string(params[:contract_code])
-        Logger.info("  #{params[:hash]}: len=#{String.length(code_str)}, prefix=#{String.slice(code_str, 0, 10)}")
-      end)
-    end
-
-    result =
-      Import.insert_changes_list(
-        repo,
-        ordered_changes_list,
-        conflict_target: :hash,
-        on_conflict: on_conflict,
-        for: Address,
-        returning: true,
-        timeout: timeout,
-        timestamps: timestamps
-      )
-
-    case result do
-      {:ok, addresses} ->
-        saved_contracts = Enum.filter(addresses, fn addr -> addr.contract_code end)
-
-        if length(contracts_to_insert) > 0 do
-          Logger.info("AFTER INSERT: #{length(saved_contracts)} contracts saved")
-
-          Enum.each(contracts_to_insert, fn original ->
-            addr = Enum.find(addresses, &(to_string(&1.hash) == to_string(original[:hash])))
-
-            if addr do
-              code_len = if addr.contract_code, do: byte_size(addr.contract_code.bytes), else: 0
-              original_len = String.length(to_string(original[:contract_code]))
-
-              Logger.info("  #{addr.hash}: was=#{original_len}, now=#{code_len}")
-
-              if code_len == 0 && original_len > 10 do
-                Logger.error("CODE LOST: #{addr.hash}, was=#{original_len}, now=0, caller=#{inspect(caller_info)}")
-              end
-            else
-              Logger.warning("Address not in result: #{original[:hash]}")
-            end
-          end)
-        end
-
-        result
-
-      error ->
-        Logger.error("INSERT FAILED: #{inspect(error)}")
-        error
-    end
+    Import.insert_changes_list(
+      repo,
+      ordered_changes_list,
+      conflict_target: :hash,
+      on_conflict: on_conflict,
+      for: Address,
+      returning: true,
+      timeout: timeout,
+      timestamps: timestamps
+    )
   end
 
   defp address_max_by(address) do
