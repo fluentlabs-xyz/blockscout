@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'devel'
+      - 'chore/update-to-v9.2.2'
     tags:
       - 'v*.*.*'
 
