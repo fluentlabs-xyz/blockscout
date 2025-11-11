@@ -3,7 +3,7 @@ name: Publish Fluent-Dev Backend Docker Image
 on:
   push:
     branches:
-      - 'feat/fluent-verifier'
+      - 'devel'
     tags:
       - 'v*.*.*'
 
