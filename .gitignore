@@ -53,6 +53,7 @@ dump.rdb
 /docker-compose/services/stats-db-data
 /docker-compose/services/redis-data
 /docker-compose/services/logs
+/docker-compose/logs
 /docker-compose/tmp
 /docker-compose/envs/common-blockscout.env
 /docker-compose/envs/common-frontend.env

@@ -885,7 +885,8 @@ config :indexer,
     ConfigHelper.parse_integer_env_var("INDEXER_COIN_BALANCES_FETCHER_INIT_QUERY_LIMIT", 2000),
   graceful_shutdown_period: ConfigHelper.parse_time_env_var("INDEXER_GRACEFUL_SHUTDOWN_PERIOD", "5m"),
   internal_transactions_fetch_order:
-    ConfigHelper.parse_catalog_value("INDEXER_INTERNAL_TRANSACTIONS_FETCH_ORDER", ["asc", "desc"], true, "asc")
+    ConfigHelper.parse_catalog_value("INDEXER_INTERNAL_TRANSACTIONS_FETCH_ORDER", ["asc", "desc"], true, "asc"),
+  static_validator_address: System.get_env("FLUENT_VALIDATOR_ADDRESS")
 
 config :indexer, Indexer.Fetcher.ContractCode,
   retry_attempts: ConfigHelper.parse_integer_env_var("INDEXER_CONTRACT_CODE_RETRY_ATTEMPTS", 3),
