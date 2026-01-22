@@ -49,14 +49,15 @@ services:
     links:
       - db:database
     env_file:
-      - .env
+      - .env.frontend
     environment:
       DATABASE_URL: ${DATABASE_URL}
       PORT: "4000"
-      ETHEREUM_JSONRPC_HTTP_URL: http://host.docker.internal:8545/
-      ETHEREUM_JSONRPC_TRACE_URL: http://host.docker.internal:8545/
-      CHAIN_ID: 20994
+      ETHEREUM_JSONRPC_HTTP_URL: https://rpc.devnet.fluent.xyz
+      ETHEREUM_JSONRPC_TRACE_URL: https://rpc.devnet.fluent.xyz
+      CHAIN_ID: 20993
       FLUENT_VALIDATOR_ADDRESS: ${FLUENT_VALIDATOR_ADDRESS:-0x0000000000000000000000000000000000520fee}
+      ECTO_USE_SSL: "false"
     volumes:
       - ./logs/:/app/logs/
       - ./dets/:/app/dets/
