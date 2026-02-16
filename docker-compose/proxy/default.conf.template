@@ -1,7 +1,7 @@
 # WebSocket upgrade helper
 map $http_upgrade $connection_upgrade {
-  default upgrade;
-  ''      close;
+    default upgrade;
+    '' close;
 }
 
 # CORS allowlist (regex). Define via env in docker-compose/.env:
@@ -10,13 +10,19 @@ map $http_upgrade $connection_upgrade {
 # Or multiple:
 #   CORS_ALLOWED_ORIGIN_REGEX=^https://(blockscout-frontend-topaz\.vercel\.app|explorer\.fluentscan\.xyz)$
 map $http_origin $cors_origin {
-  default "";
-  ~*${CORS_ALLOWED_ORIGIN_REGEX} $http_origin;
+    default "";
+    ~*$ {
+        CORS_ALLOWED_ORIGIN_REGE
+    }
+    $http_origin;
 }
 
 server {
-    listen       80;
-    server_name  ${PUBLIC_HOST};
+    listen 80;
+    server_name $ {
+        PUBLIC_HOS
+    }
+    ;
     proxy_http_version 1.1;
 
     # Security/behavior (optional but sane defaults)
@@ -32,70 +38,69 @@ server {
         proxy_hide_header Access-Control-Allow-Headers;
         proxy_hide_header Access-Control-Allow-Credentials;
 
-        # CORS (no credentials; keep it simple)
-        add_header 'Access-Control-Allow-Origin'  "$cors_origin" always;
-        add_header 'Vary'                         'Origin' always;
+        # CORS headers live at location level (NOT inside if)
+        add_header 'Access-Control-Allow-Origin' "$cors_origin" always;
+        add_header 'Vary' 'Origin' always;
         add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
         add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, X-Requested-With' always;
+        add_header 'Access-Control-Max-Age' 86400 always;
 
-        if ($request_method = 'OPTIONS') {
-            add_header 'Access-Control-Allow-Origin'  "$cors_origin" always;
-            add_header 'Vary'                         'Origin' always;
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
-            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, X-Requested-With' always;
-            add_header 'Access-Control-Max-Age'        86400 always;
-            add_header 'Content-Length'                0;
-            add_header 'Content-Type'                  'text/plain; charset=utf-8';
+        # Preflight: only return; no add_header here
+        if ($request_method = OPTIONS) {
             return 204;
         }
 
-        proxy_pass            http://stats:8050;
-        proxy_set_header      Host               $host;
-        proxy_set_header      X-Real-IP          $remote_addr;
-        proxy_set_header      X-Forwarded-For    $proxy_add_x_forwarded_for;
-        proxy_set_header      X-Forwarded-Proto  $scheme;
-        proxy_set_header      Upgrade            $http_upgrade;
-        proxy_set_header      Connection         $connection_upgrade;
-        proxy_cache_bypass    $http_upgrade;
+        proxy_pass http://stats:8050;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
     }
 
     # =========================
     # Backend API / WS / Auth
     # =========================
     location ~ ^/(api(?!-docs$)|socket|sitemap\.xml|auth/auth0|auth/auth0/callback|auth/logout) {
-        proxy_pass            ${BACK_PROXY_PASS};
-        proxy_set_header      Host               $host;
-        proxy_set_header      X-Real-IP          $remote_addr;
-        proxy_set_header      X-Forwarded-For    $proxy_add_x_forwarded_for;
-        proxy_set_header      X-Forwarded-Proto  $scheme;
-        proxy_set_header      Upgrade            $http_upgrade;
-        proxy_set_header      Connection         $connection_upgrade;
-        proxy_cache_bypass    $http_upgrade;
+        proxy_pass $ {
+            BACK_PROXY_PAS
+        }
+        ;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
     }
 
     # =========================
     # Frontend (optional)
-    # If you move UI to Vercel, you can keep this but it won't be used.
     # =========================
     location / {
-        proxy_pass            ${FRONT_PROXY_PASS};
-        proxy_set_header      Host               $host;
-        proxy_set_header      X-Real-IP          $remote_addr;
-        proxy_set_header      X-Forwarded-For    $proxy_add_x_forwarded_for;
-        proxy_set_header      X-Forwarded-Proto  $scheme;
-        proxy_set_header      Upgrade            $http_upgrade;
-        proxy_set_header      Connection         $connection_upgrade;
-        proxy_cache_bypass    $http_upgrade;
+        proxy_pass $ {
+            FRONT_PROXY_PAS
+        }
+        ;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
     }
 }
 
-# NOTE (prod recommendation):
-# In production, consider NOT publishing 8080/8081 externally at all.
-# If you still publish them, keep them consistent and parameterized.
-
 server {
-    listen       8080;
-    server_name  ${PUBLIC_HOST};
+    listen 8080;
+    server_name $ {
+        PUBLIC_HOS
+    }
+    ;
     proxy_http_version 1.1;
     server_tokens off;
 
@@ -104,37 +109,34 @@ server {
     proxy_hide_header Access-Control-Allow-Headers;
     proxy_hide_header Access-Control-Allow-Credentials;
 
-    add_header 'Access-Control-Allow-Origin'  "$cors_origin" always;
-    add_header 'Vary'                         'Origin' always;
+    add_header 'Access-Control-Allow-Origin' "$cors_origin" always;
+    add_header 'Vary' 'Origin' always;
     add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
     add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, X-Requested-With' always;
+    add_header 'Access-Control-Max-Age' 86400 always;
 
-    if ($request_method = 'OPTIONS') {
-        add_header 'Access-Control-Allow-Origin'  "$cors_origin" always;
-        add_header 'Vary'                         'Origin' always;
-        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
-        add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, X-Requested-With' always;
-        add_header 'Access-Control-Max-Age'        86400 always;
-        add_header 'Content-Length'                0;
-        add_header 'Content-Type'                  'text/plain; charset=utf-8';
+    if ($request_method = OPTIONS) {
         return 204;
     }
 
     location / {
-        proxy_pass            http://stats:8050/;
-        proxy_set_header      Host               $host;
-        proxy_set_header      X-Real-IP          $remote_addr;
-        proxy_set_header      X-Forwarded-For    $proxy_add_x_forwarded_for;
-        proxy_set_header      X-Forwarded-Proto  $scheme;
-        proxy_set_header      Upgrade            $http_upgrade;
-        proxy_set_header      Connection         $connection_upgrade;
-        proxy_cache_bypass    $http_upgrade;
+        proxy_pass http://stats:8050/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
     }
 }
 
 server {
-    listen       8081;
-    server_name  ${PUBLIC_HOST};
+    listen 8081;
+    server_name $ {
+        PUBLIC_HOS
+    }
+    ;
     proxy_http_version 1.1;
     server_tokens off;
 
@@ -143,35 +145,29 @@ server {
     proxy_hide_header Access-Control-Allow-Headers;
     proxy_hide_header Access-Control-Allow-Credentials;
 
-    add_header 'Access-Control-Allow-Origin'  "$cors_origin" always;
-    add_header 'Vary'                         'Origin' always;
+    add_header 'Access-Control-Allow-Origin' "$cors_origin" always;
+    add_header 'Vary' 'Origin' always;
     add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
     add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, X-Requested-With' always;
+    add_header 'Access-Control-Max-Age' 86400 always;
 
-    if ($request_method = 'OPTIONS') {
-        add_header 'Access-Control-Allow-Origin'  "$cors_origin" always;
-        add_header 'Vary'                         'Origin' always;
-        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
-        add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, X-Requested-With' always;
-        add_header 'Access-Control-Max-Age'        86400 always;
-        add_header 'Content-Length'                0;
-        add_header 'Content-Type'                  'text/plain; charset=utf-8';
+    if ($request_method = OPTIONS) {
         return 204;
     }
 
     location / {
-        proxy_pass            http://visualizer:8050/;
-        proxy_buffering       off;
+        proxy_pass http://visualizer:8050/;
+        proxy_buffering off;
         proxy_connect_timeout 30m;
-        proxy_read_timeout    30m;
-        proxy_send_timeout    30m;
+        proxy_read_timeout 30m;
+        proxy_send_timeout 30m;
 
-        proxy_set_header      Host               $host;
-        proxy_set_header      X-Real-IP          $remote_addr;
-        proxy_set_header      X-Forwarded-For    $proxy_add_x_forwarded_for;
-        proxy_set_header      X-Forwarded-Proto  $scheme;
-        proxy_set_header      Upgrade            $http_upgrade;
-        proxy_set_header      Connection         $connection_upgrade;
-        proxy_cache_bypass    $http_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_cache_bypass $http_upgrade;
     }
 }
