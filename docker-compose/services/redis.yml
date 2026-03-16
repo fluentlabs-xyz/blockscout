@@ -6,4 +6,4 @@ services:
     container_name: redis-db
     command: redis-server
     volumes:
-      - ./redis-data:/data
+      - ${REDIS_DB_DATA:-./redis-data}:/data
