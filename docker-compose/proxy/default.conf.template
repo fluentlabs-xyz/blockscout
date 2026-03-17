@@ -58,6 +58,10 @@ server {
     # Backend API / WS / Auth
     # =========================
     location ~ ^/(api(?!-docs$)|socket|sitemap\.xml|auth/auth0|auth/auth0/callback|auth/logout) {
+        proxy_buffer_size       128k;
+        proxy_buffers           8 256k;
+        proxy_busy_buffers_size 512k;
+
         proxy_pass ${BACK_PROXY_PASS};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
