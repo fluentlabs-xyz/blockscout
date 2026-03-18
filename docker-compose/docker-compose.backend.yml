@@ -79,6 +79,8 @@ services:
     extends:
       file: ./services/nginx.yml
       service: proxy
+    volumes:
+      - "../proxy/default.conf.backend_only.template:/etc/nginx/templates/default.conf.template"
 
   fluent-verifier:
     user: root
