@@ -38,6 +38,14 @@ defmodule BlockScoutWeb.API.V2.AddressController do
 
   alias BlockScoutWeb.API.V2.CeloView
   alias Explorer.Chain.Celo.ElectionReward, as: CeloElectionReward
+
+  @runtime_upgrades_address "0x0000000000000000000000000000000000520010"
+  @runtime_upgrades_address_hash (
+    case Hash.Address.cast(@runtime_upgrades_address) do
+      {:ok, address_hash} -> address_hash
+      _ -> nil
+    end
+  )
   alias Explorer.Chain.Celo.Reader, as: CeloReader
 
   alias Indexer.Fetcher.OnDemand.CoinBalance, as: CoinBalanceOnDemand
@@ -501,43 +509,24 @@ defmodule BlockScoutWeb.API.V2.AddressController do
   end
 
   @doc """
-  Handles GET requests to `/api/v2/addresses/:address_hash_param/runtime-upgrades` endpoint.
+  Handles GET requests to `/api/v2/runtime-upgrades` endpoint.
 
   Returns runtime-upgrade aggregates grouped by `genesis_hash` (EVM `topic2`, stored
   as `third_topic` in Blockscout logs schema) for the `RuntimeUpgraded` event emitted
-  by the runtime-upgrade system contract.
-
-  ## Parameters
-
-    - conn: The connection struct.
-    - params: A map containing the parameters for the request.
-
-  ## Returns
-
-    - `{:format, :error}` if provided address_hash is invalid.
-    - `{:restricted_access, true}` if access is restricted.
-    - `Plug.Conn.t()` if the request is successful.
+  by the runtime-upgrade system contract at a fixed address.
   """
-  @spec runtime_upgrades(Plug.Conn.t(), map()) ::
-          {:format, :error} | {:restricted_access, true} | Plug.Conn.t()
-  def runtime_upgrades(conn, %{"address_hash_param" => address_hash_string} = params) do
-    with {:ok, address_hash} <- validate_address_hash(address_hash_string, params) do
-      case Chain.hash_to_address(address_hash, @api_true) do
-        {:ok, _address} ->
-          runtime_upgrades = Chain.address_to_runtime_upgrades(address_hash, @api_true)
-
-          conn
-          |> put_status(200)
-          |> put_view(AddressView)
-          |> render(:runtime_upgrades, %{runtime_upgrades: runtime_upgrades})
-
-        _ ->
-          conn
-          |> put_status(200)
-          |> put_view(AddressView)
-          |> render(:runtime_upgrades, %{runtime_upgrades: []})
+  @spec runtime_upgrades(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def runtime_upgrades(conn, _params) do
+    runtime_upgrades =
+      case @runtime_upgrades_address_hash do
+        nil -> []
+        address_hash -> Chain.address_to_runtime_upgrades(address_hash, @api_true)
       end
-    end
+
+    conn
+    |> put_status(200)
+    |> put_view(AddressView)
+    |> render(:runtime_upgrades, %{runtime_upgrades: runtime_upgrades})
   end
 
   @doc """
