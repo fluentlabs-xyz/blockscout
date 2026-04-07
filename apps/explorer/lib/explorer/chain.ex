@@ -309,7 +309,8 @@ defmodule Explorer.Chain do
   end
 
   @doc """
-  Returns runtime-upgrade aggregates for an address grouped by `genesis_hash` (`topic2`).
+  Returns runtime-upgrade aggregates for an address grouped by `genesis_hash`
+  (EVM `topic2`, stored as `third_topic` in Blockscout logs schema).
 
   The query filters logs by the `RuntimeUpgraded` event signature and produces one item per
   `genesis_hash` with:
@@ -326,7 +327,7 @@ defmodule Explorer.Chain do
       from(log in Log,
         where: log.address_hash == ^address_hash,
         where: log.first_topic == ^@runtime_upgraded_topic_hash,
-        where: not is_nil(log.second_topic),
+        where: not is_nil(log.third_topic),
         inner_join: block in Block,
         on: block.hash == log.block_hash,
         where: block.consensus == true
@@ -335,9 +336,9 @@ defmodule Explorer.Chain do
 
     grouped_rows =
       from(log in base_query,
-        group_by: log.second_topic,
+        group_by: log.third_topic,
         select: %{
-          genesis_hash: log.second_topic,
+          genesis_hash: log.third_topic,
           upgrades_count: count(log.index),
           latest_block_number: max(log.block_number)
         }
@@ -346,9 +347,9 @@ defmodule Explorer.Chain do
 
     latest_data_by_hash =
       from(log in base_query,
-        distinct: log.second_topic,
-        order_by: [asc: log.second_topic, desc: log.block_number, desc: log.index],
-        select: %{genesis_hash: log.second_topic, data: log.data}
+        distinct: log.third_topic,
+        order_by: [asc: log.third_topic, desc: log.block_number, desc: log.index],
+        select: %{genesis_hash: log.third_topic, data: log.data}
       )
       |> select_repo(options).all()
       |> Map.new(fn %{genesis_hash: genesis_hash, data: data} -> {genesis_hash, data} end)

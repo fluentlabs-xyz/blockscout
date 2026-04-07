@@ -13,6 +13,7 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
     Block,
     InternalTransaction,
     Log,
+    Hash,
     Token,
     Token.Instance,
     TokenTransfer,
@@ -2518,26 +2519,22 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
     end
   end
 
-  describe "/addresses/{address_hash}/runtime-upgrades" do
-    test "get empty list on non existing address", %{conn: conn} do
-      address = build(:address)
+  describe "/runtime-upgrades" do
+    @runtime_upgrades_address "0x0000000000000000000000000000000000520010"
 
-      request = get(conn, "/api/v2/addresses/#{address.hash}/runtime-upgrades")
+    test "get empty list when there are no runtime-upgrade logs", %{conn: conn} do
+      request = get(conn, "/api/v2/runtime-upgrades")
 
       assert %{"items" => []} = json_response(request, 200)
     end
 
-    test "get 422 on invalid address", %{conn: conn} do
-      request = get(conn, "/api/v2/addresses/0x/runtime-upgrades")
-
-      assert %{"message" => "Invalid parameter(s)"} = json_response(request, 422)
-    end
-
     test "aggregates runtime upgrades by genesis hash", %{conn: conn} do
-      address = insert(:address)
+      {:ok, runtime_upgrades_address_hash} = Hash.Address.cast(@runtime_upgrades_address)
 
       hash_1 = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       hash_2 = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      target_topic_1 = "0x0000000000000000000000000000000000000000000000000000000000000001"
+      target_topic_2 = "0x0000000000000000000000000000000000000000000000000000000000000002"
       code_hash_1 = "0x1111111111111111111111111111111111111111111111111111111111111111"
       code_hash_2 = "0x2222222222222222222222222222222222222222222222222222222222222222"
 
@@ -2550,9 +2547,11 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
         block: tx_1.block,
         block_number: tx_1.block_number,
         index: 0,
-        address: address,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
         first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
-        second_topic: TestHelper.topic(hash_1),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
         data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
       )
 
@@ -2561,9 +2560,11 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
         block: tx_2.block,
         block_number: tx_2.block_number,
         index: 0,
-        address: address,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
         first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
-        second_topic: TestHelper.topic(hash_1),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
         data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
       )
 
@@ -2572,9 +2573,11 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
         block: tx_3.block,
         block_number: tx_3.block_number,
         index: 0,
-        address: address,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
         first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
-        second_topic: TestHelper.topic(hash_2),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
         data: runtime_upgraded_log_data("v1.1.0", code_hash_2)
       )
 
@@ -2584,13 +2587,28 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
         block: tx_3.block,
         block_number: tx_3.block_number,
         index: 1,
-        address: address,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
         first_topic: TestHelper.topic(@first_topic_hex_string_1),
-        second_topic: TestHelper.topic(hash_2),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
         data: runtime_upgraded_log_data("ignored", code_hash_2)
       )
 
-      request = get(conn, "/api/v2/addresses/#{address.hash}/runtime-upgrades")
+      # same event on a different contract should be ignored
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 2,
+        address: insert(:address),
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("ignored", code_hash_2)
+      )
+
+      request = get(conn, "/api/v2/runtime-upgrades")
 
       assert %{"items" => items} = json_response(request, 200)
       assert length(items) == 2

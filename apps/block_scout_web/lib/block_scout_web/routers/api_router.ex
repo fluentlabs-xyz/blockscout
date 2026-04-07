@@ -222,6 +222,8 @@ defmodule BlockScoutWeb.Routers.ApiRouter do
       end
     end
 
+    get("/runtime-upgrades", V2.AddressController, :runtime_upgrades)
+
     scope "/addresses" do
       get("/", V2.AddressController, :addresses_list)
       get("/:address_hash_param", V2.AddressController, :address)
@@ -236,7 +238,6 @@ defmodule BlockScoutWeb.Routers.ApiRouter do
       get("/:address_hash_param/internal-transactions", V2.AddressController, :internal_transactions)
       get("/:address_hash_param/internal-transactions/csv", V2.CsvExportController, :internal_transactions_csv)
       get("/:address_hash_param/logs", V2.AddressController, :logs)
-      get("/:address_hash_param/runtime-upgrades", V2.AddressController, :runtime_upgrades)
       get("/:address_hash_param/logs/csv", V2.CsvExportController, :logs_csv)
       get("/:address_hash_param/blocks-validated", V2.AddressController, :blocks_validated)
       get("/:address_hash_param/coin-balance-history", V2.AddressController, :coin_balance_history)
