@@ -342,8 +342,7 @@ defmodule Explorer.Chain do
           latest_block_number: max(log.block_number)
         }
       )
-      |> select_repo(options)
-      |> Repo.all()
+      |> select_repo(options).all()
 
     latest_data_by_hash =
       from(log in base_query,
@@ -351,8 +350,7 @@ defmodule Explorer.Chain do
         order_by: [asc: log.second_topic, desc: log.block_number, desc: log.index],
         select: %{genesis_hash: log.second_topic, data: log.data}
       )
-      |> select_repo(options)
-      |> Repo.all()
+      |> select_repo(options).all()
       |> Map.new(fn %{genesis_hash: genesis_hash, data: data} -> {genesis_hash, data} end)
 
     grouped_rows
@@ -375,15 +373,34 @@ defmodule Explorer.Chain do
     if byte_size(bytes) < 32 do
       nil
     else
-      first_word = decode_word(bytes, 0)
+      tuple_offset = decode_word(bytes, 0)
 
-      [0, first_word]
-      |> Enum.uniq()
-      |> Enum.find_value(&decode_dynamic_string(bytes, &1))
+      decode_tuple_encoded_runtime_upgrade_genesis_version(bytes, tuple_offset) ||
+        decode_dynamic_string(bytes, 0) ||
+        decode_dynamic_string(bytes, tuple_offset)
     end
   end
 
   defp decode_runtime_upgrade_genesis_version(_), do: nil
+
+  defp decode_tuple_encoded_runtime_upgrade_genesis_version(bytes, tuple_offset) do
+    with true <- is_integer(tuple_offset) and tuple_offset >= 0,
+         true <- tuple_offset + 64 <= byte_size(bytes),
+         string_relative_offset <- decode_word(bytes, tuple_offset),
+         true <- is_integer(string_relative_offset),
+         string_length_offset <- tuple_offset + string_relative_offset,
+         true <- string_length_offset + 32 <= byte_size(bytes),
+         string_length <- decode_word(bytes, string_length_offset),
+         true <- is_integer(string_length) and string_length >= 0,
+         string_offset <- string_length_offset + 32,
+         true <- string_offset + string_length <= byte_size(bytes),
+         string_binary <- binary_part(bytes, string_offset, string_length),
+         true <- String.valid?(string_binary) do
+      string_binary
+    else
+      _ -> nil
+    end
+  end
 
   defp decode_dynamic_string(bytes, head_offset) do
     with true <- is_integer(head_offset) and head_offset >= 0,
