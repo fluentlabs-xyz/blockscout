@@ -28,7 +28,7 @@ defmodule BlockScoutWeb.API.V2.AddressController do
   import Explorer.MicroserviceInterfaces.Metadata, only: [maybe_preload_metadata: 1]
 
   alias BlockScoutWeb.AccessHelper
-  alias BlockScoutWeb.API.V2.{BlockView, TransactionView, WithdrawalView}
+  alias BlockScoutWeb.API.V2.{AddressView, BlockView, TransactionView, WithdrawalView}
   alias Explorer.{Chain, Market}
   alias Explorer.Chain.{Address, Hash, InternalTransaction, Transaction}
   alias Explorer.Chain.Address.Counters
@@ -496,6 +496,45 @@ defmodule BlockScoutWeb.API.V2.AddressController do
             logs: [],
             next_page_params: nil
           })
+      end
+    end
+  end
+
+  @doc """
+  Handles GET requests to `/api/v2/addresses/:address_hash_param/runtime-upgrades` endpoint.
+
+  Returns runtime-upgrade aggregates grouped by `genesis_hash` (`topic2`) for the
+  `RuntimeUpgraded` event emitted by the runtime-upgrade system contract.
+
+  ## Parameters
+
+    - conn: The connection struct.
+    - params: A map containing the parameters for the request.
+
+  ## Returns
+
+    - `{:format, :error}` if provided address_hash is invalid.
+    - `{:restricted_access, true}` if access is restricted.
+    - `Plug.Conn.t()` if the request is successful.
+  """
+  @spec runtime_upgrades(Plug.Conn.t(), map()) ::
+          {:format, :error} | {:restricted_access, true} | Plug.Conn.t()
+  def runtime_upgrades(conn, %{"address_hash_param" => address_hash_string} = params) do
+    with {:ok, address_hash} <- validate_address_hash(address_hash_string, params) do
+      case Chain.hash_to_address(address_hash, @api_true) do
+        {:ok, _address} ->
+          runtime_upgrades = Chain.address_to_runtime_upgrades(address_hash, @api_true)
+
+          conn
+          |> put_status(200)
+          |> put_view(AddressView)
+          |> render(:runtime_upgrades, %{runtime_upgrades: runtime_upgrades})
+
+        _ ->
+          conn
+          |> put_status(200)
+          |> put_view(AddressView)
+          |> render(:runtime_upgrades, %{runtime_upgrades: []})
       end
     end
   end

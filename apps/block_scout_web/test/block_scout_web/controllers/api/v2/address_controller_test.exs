@@ -31,6 +31,7 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
   import Mox
 
   @first_topic_hex_string_1 "0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65"
+  @runtime_upgraded_topic_hex_string "0x2b9d873d8fe3cc1332bb875ae358b40fd305d1776ebe63cc80bac10fd3cf057b"
   @instances_amount_in_collection 9
 
   setup :set_mox_global
@@ -2517,6 +2518,93 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
     end
   end
 
+  describe "/addresses/{address_hash}/runtime-upgrades" do
+    test "get empty list on non existing address", %{conn: conn} do
+      address = build(:address)
+
+      request = get(conn, "/api/v2/addresses/#{address.hash}/runtime-upgrades")
+
+      assert %{"items" => []} = json_response(request, 200)
+    end
+
+    test "get 422 on invalid address", %{conn: conn} do
+      request = get(conn, "/api/v2/addresses/0x/runtime-upgrades")
+
+      assert %{"message" => "Invalid parameter(s)"} = json_response(request, 422)
+    end
+
+    test "aggregates runtime upgrades by genesis hash", %{conn: conn} do
+      address = insert(:address)
+
+      hash_1 = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      hash_2 = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      code_hash_1 = "0x1111111111111111111111111111111111111111111111111111111111111111"
+      code_hash_2 = "0x2222222222222222222222222222222222222222222222222222222222222222"
+
+      tx_1 = :transaction |> insert() |> with_block(status: :ok)
+      tx_2 = :transaction |> insert() |> with_block(status: :ok)
+      tx_3 = :transaction |> insert() |> with_block(status: :ok)
+
+      insert(:log,
+        transaction: tx_1,
+        block: tx_1.block,
+        block_number: tx_1.block_number,
+        index: 0,
+        address: address,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      insert(:log,
+        transaction: tx_2,
+        block: tx_2.block,
+        block_number: tx_2.block_number,
+        index: 0,
+        address: address,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 0,
+        address: address,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("v1.1.0", code_hash_2)
+      )
+
+      # unrelated topic should be ignored
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 1,
+        address: address,
+        first_topic: TestHelper.topic(@first_topic_hex_string_1),
+        second_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("ignored", code_hash_2)
+      )
+
+      request = get(conn, "/api/v2/addresses/#{address.hash}/runtime-upgrades")
+
+      assert %{"items" => items} = json_response(request, 200)
+      assert length(items) == 2
+
+      by_hash = Map.new(items, fn item -> {item["genesis_hash"], item} end)
+
+      assert by_hash[hash_1]["genesis_version"] == "v1.0.0"
+      assert by_hash[hash_1]["upgrades_count"] == 2
+
+      assert by_hash[hash_2]["genesis_version"] == "v1.1.0"
+      assert by_hash[hash_2]["upgrades_count"] == 1
+    end
+  end
+
   describe "/addresses/{address_hash}/tokens" do
     test "get empty list on non existing address", %{conn: conn} do
       address = build(:address)
@@ -3997,6 +4085,27 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
              "image_url" => ^image_url,
              "is_unique" => nil
            } = json
+  end
+
+  defp runtime_upgraded_log_data(genesis_version, code_hash) do
+    stripped_hash = String.trim_leading(code_hash, "0x")
+    version_bytes = genesis_version
+    version_len = byte_size(version_bytes)
+    padded_len = div(version_len + 31, 32) * 32
+    padded_version_bytes = version_bytes <> :binary.copy(<<0>>, padded_len - version_len)
+
+    "0x" <>
+      encode_abi_word(32) <>
+      encode_abi_word(64) <>
+      stripped_hash <>
+      encode_abi_word(version_len) <>
+      Base.encode16(padded_version_bytes, case: :lower)
+  end
+
+  defp encode_abi_word(value) do
+    value
+    |> Integer.to_string(16)
+    |> String.pad_leading(64, "0")
   end
 
   defp value("ERC-721", _), do: 1

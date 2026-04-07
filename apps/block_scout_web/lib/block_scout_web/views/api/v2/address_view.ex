@@ -71,6 +71,10 @@ defmodule BlockScoutWeb.API.V2.AddressView do
     %{"items" => Enum.map(nft_collections, &prepare_nft_collection(&1)), "next_page_params" => next_page_params}
   end
 
+  def render("runtime_upgrades.json", %{runtime_upgrades: runtime_upgrades}) do
+    %{"items" => Enum.map(runtime_upgrades, &prepare_runtime_upgrade/1)}
+  end
+
   @doc """
   Prepares an address for display in the addresses list.
 
@@ -165,6 +169,14 @@ defmodule BlockScoutWeb.API.V2.AddressView do
     %{
       "date" => coin_balance_by_day.date,
       "value" => coin_balance_by_day.value
+    }
+  end
+
+  defp prepare_runtime_upgrade(runtime_upgrade) do
+    %{
+      "genesis_hash" => to_string(runtime_upgrade.genesis_hash),
+      "genesis_version" => runtime_upgrade.genesis_version,
+      "upgrades_count" => runtime_upgrade.upgrades_count
     }
   end
 
