@@ -503,8 +503,9 @@ defmodule BlockScoutWeb.API.V2.AddressController do
   @doc """
   Handles GET requests to `/api/v2/addresses/:address_hash_param/runtime-upgrades` endpoint.
 
-  Returns runtime-upgrade aggregates grouped by `genesis_hash` (`topic2`) for the
-  `RuntimeUpgraded` event emitted by the runtime-upgrade system contract.
+  Returns runtime-upgrade aggregates grouped by `genesis_hash` (EVM `topic2`, stored
+  as `third_topic` in Blockscout logs schema) for the `RuntimeUpgraded` event emitted
+  by the runtime-upgrade system contract.
 
   ## Parameters
 
