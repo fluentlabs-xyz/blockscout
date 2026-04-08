@@ -309,6 +309,41 @@ defmodule Explorer.Chain do
   end
 
   @doc """
+  Returns paginated runtime-upgrade logs for a specific `genesis_hash`
+  (EVM `topic2`, stored as `third_topic` in Blockscout logs schema).
+  """
+  @spec runtime_upgrades_by_genesis_hash(Hash.Address.t(), Hash.Full.t(), [paging_options | api?]) :: [Log.t()]
+  def runtime_upgrades_by_genesis_hash(address_hash, genesis_hash, options \\ []) when is_list(options) do
+    paging_options = Keyword.get(options, :paging_options) || @default_paging_options
+
+    case paging_options do
+      %PagingOptions{key: {0, 0}} ->
+        []
+
+      _ ->
+        from_block = from_block(options)
+        to_block = to_block(options)
+
+        from(log in Log,
+          order_by: [desc: log.block_number, desc: log.index],
+          where: log.address_hash == ^address_hash,
+          where: log.first_topic == ^@runtime_upgraded_topic_hash,
+          where: log.third_topic == ^genesis_hash,
+          limit: ^paging_options.page_size,
+          select: log,
+          inner_join: block in Block,
+          on: block.hash == log.block_hash,
+          where: block.consensus == true,
+          preload: [:block]
+        )
+        |> page_logs(paging_options)
+        |> BlockReaderGeneral.where_block_number_in_period(from_block, to_block)
+        |> select_repo(options).all()
+        |> Enum.take(paging_options.page_size)
+    end
+  end
+
+  @doc """
   Returns runtime-upgrade aggregates for an address grouped by `genesis_hash`
   (EVM `topic2`, stored as `third_topic` in Blockscout logs schema).
 

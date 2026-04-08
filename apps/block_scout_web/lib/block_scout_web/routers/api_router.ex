@@ -223,6 +223,7 @@ defmodule BlockScoutWeb.Routers.ApiRouter do
     end
 
     get("/runtime-upgrades", V2.AddressController, :runtime_upgrades)
+    get("/runtime-upgrades/:genesis_hash", V2.AddressController, :runtime_upgrades_by_genesis_hash)
 
     scope "/addresses" do
       get("/", V2.AddressController, :addresses_list)

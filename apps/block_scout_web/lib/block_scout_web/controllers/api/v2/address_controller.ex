@@ -40,12 +40,10 @@ defmodule BlockScoutWeb.API.V2.AddressController do
   alias Explorer.Chain.Celo.ElectionReward, as: CeloElectionReward
 
   @runtime_upgrades_address "0x0000000000000000000000000000000000520010"
-  @runtime_upgrades_address_hash (
-    case Hash.Address.cast(@runtime_upgrades_address) do
-      {:ok, address_hash} -> address_hash
-      _ -> nil
-    end
-  )
+  @runtime_upgrades_address_hash (case Hash.Address.cast(@runtime_upgrades_address) do
+                                    {:ok, address_hash} -> address_hash
+                                    _ -> nil
+                                  end)
   alias Explorer.Chain.Celo.Reader, as: CeloReader
 
   alias Indexer.Fetcher.OnDemand.CoinBalance, as: CoinBalanceOnDemand
@@ -527,6 +525,43 @@ defmodule BlockScoutWeb.API.V2.AddressController do
     |> put_status(200)
     |> put_view(AddressView)
     |> render(:runtime_upgrades, %{runtime_upgrades: runtime_upgrades})
+  end
+
+  @doc """
+  Handles GET requests to `/api/v2/runtime-upgrades/:genesis_hash` endpoint.
+
+  Returns a paginated list of runtime-upgrade events for the given `genesis_hash` from
+  the fixed runtime-upgrade system contract.
+  """
+  @spec runtime_upgrades_by_genesis_hash(Plug.Conn.t(), map()) :: {:format, :error} | Plug.Conn.t()
+  def runtime_upgrades_by_genesis_hash(conn, %{"genesis_hash" => genesis_hash_param} = params) do
+    with {:ok, genesis_hash} <- validate_optional_topic(genesis_hash_param) do
+      {logs, next_page_params} =
+        case @runtime_upgrades_address_hash do
+          nil ->
+            {[], nil}
+
+          address_hash ->
+            options =
+              params
+              |> paging_options()
+              |> Keyword.merge(@api_true)
+
+            results_plus_one = Chain.runtime_upgrades_by_genesis_hash(address_hash, genesis_hash, options)
+            {logs, next_page} = split_list_by_page(results_plus_one)
+
+            next_page_params =
+              next_page
+              |> next_page_params(logs, delete_parameters_from_next_page_params(params))
+
+            {logs, next_page_params}
+        end
+
+      conn
+      |> put_status(200)
+      |> put_view(AddressView)
+      |> render(:runtime_upgrade_logs, %{logs: logs, next_page_params: next_page_params})
+    end
   end
 
   @doc """
