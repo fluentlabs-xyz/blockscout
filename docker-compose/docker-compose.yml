@@ -1,4 +1,4 @@
-version: '3.9'
+version: "3.9"
 
 services:
   redis-db:
@@ -26,30 +26,14 @@ services:
     extends:
       file: ./services/backend.yml
       service: backend
-    build:
-      context: ..
-      dockerfile: ./docker/Dockerfile
-      args:
-        RELEASE_VERSION: 8.1.1
     links:
       - db:database
     environment:
-        ETHEREUM_JSONRPC_HTTP_URL: http://host.docker.internal:8545/
-        ETHEREUM_JSONRPC_TRACE_URL: http://host.docker.internal:8545/
-        ETHEREUM_JSONRPC_WS_URL: ws://host.docker.internal:8545/
-        CHAIN_ID: '1337'
-
-  nft_media_handler:
-    depends_on:
-      - backend
-    extends:
-      file: ./services/nft_media_handler.yml
-      service: nft_media_handler
-    build:
-      context: ..
-      dockerfile: ./docker/Dockerfile
-      args:
-        RELEASE_VERSION: 8.1.1
+      MICROSERVICE_FLUENT_VERIFIER_URL:
+        http://fluent-verifier:8050
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: "4000"
+    # command: /bin/sh -c "sleep 600"
 
   visualizer:
     extends:
@@ -105,3 +89,18 @@ services:
     extends:
       file: ./services/nginx.yml
       service: proxy
+
+  fluent-verifier:
+    user: root
+    image: ghcr.io/fluentlabs-xyz/fluent-verifier:latest
+    container_name: fluent-verifier
+    platform: linux/amd64
+    depends_on:
+      - backend
+    ports:
+      - "8089:8050"
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - RUST_LOG=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

@@ -1,4 +1,4 @@
-version: '3.9'
+version: "3.9"
 
 services:
   redis-db:
@@ -29,11 +29,9 @@ services:
     links:
       - db:database
     environment:
-        ETHEREUM_JSONRPC_VARIANT: 'anvil'
-        ETHEREUM_JSONRPC_WS_URL: ws://host.docker.internal:8545/
-        INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER: 'true'
-        INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: 'true'
-        CHAIN_ID: '1337'
+      MICROSERVICE_FLUENT_VERIFIER_URL: http://fluent-verifier:8050
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: "4000"
 
   visualizer:
     extends:
@@ -44,16 +42,6 @@ services:
     extends:
       file: ./services/sig-provider.yml
       service: sig-provider
-
-  frontend:
-    depends_on:
-      - backend
-    extends:
-      file: ./services/frontend.yml
-      service: frontend
-    environment:
-      NEXT_PUBLIC_NETWORK_ID: '1337'
-      NEXT_PUBLIC_NETWORK_RPC_URL: http://host.docker.internal:8545/
 
   stats-db-init:
     extends:
@@ -87,8 +75,24 @@ services:
   proxy:
     depends_on:
       - backend
-      - frontend
       - stats
     extends:
       file: ./services/nginx.yml
       service: proxy
+    volumes:
+      - "../proxy/default.conf.backend_only.template:/etc/nginx/templates/default.conf.template"
+
+  fluent-verifier:
+    user: root
+    image: ghcr.io/fluentlabs-xyz/fluent-verifier:latest
+    container_name: fluent-verifier
+    platform: linux/amd64
+    depends_on:
+      - backend
+    ports:
+      - "8089:8050"
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - RUST_LOG=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

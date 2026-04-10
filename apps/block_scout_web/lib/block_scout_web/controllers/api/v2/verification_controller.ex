@@ -14,7 +14,15 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
   alias Explorer.SmartContract.Solidity.PublishHelper
   alias Explorer.SmartContract.Stylus.PublisherWorker, as: StylusPublisherWorker
   alias Explorer.SmartContract.Vyper.PublisherWorker, as: VyperPublisherWorker
-  alias Explorer.SmartContract.{CompilerVersion, RustVerifierInterface, Solidity.CodeCompiler, StylusVerifierInterface}
+  alias Explorer.SmartContract.Fluent.PublisherWorker, as: FluentPublisherWorker
+
+  alias Explorer.SmartContract.{
+    CompilerVersion,
+    RustVerifierInterface,
+    Solidity.CodeCompiler,
+    StylusVerifierInterface,
+    FluentVerifierInterface
+  }
 
   action_fallback(BlockScoutWeb.API.V2.FallbackController)
 
@@ -49,6 +57,7 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
       base_config
       |> maybe_add_zk_options()
       |> maybe_add_stylus_options()
+      |> maybe_add_fluent_options()
 
     conn
     |> json(config)
@@ -71,6 +80,10 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
             do: ["stylus-github-repository" | &1],
             else: &1
           )).()
+      |> (&if(FluentVerifierInterface.enabled?(),
+            do: ["fluent" | &1],
+            else: &1
+          )).()
     end
   end
 
@@ -91,6 +104,16 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
     if StylusVerifierInterface.enabled?() do
       config
       |> Map.put(:stylus_compiler_versions, CompilerVersion.fetch_version_list(:stylus))
+    else
+      config
+    end
+  end
+
+  # Adds Fluent compiler versions to config if Fluent verification is enabled
+  defp maybe_add_fluent_options(config) do
+    if FluentVerifierInterface.enabled?() do
+      config
+      |> Map.put(:fluent_compiler_versions, CompilerVersion.fetch_version_list(:fluent))
     else
       config
     end
@@ -358,6 +381,70 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
       conn
       |> put_view(ApiView)
       |> render(:message, %{message: @sc_verification_started})
+    end
+  end
+
+  @doc """
+  Initiates verification of a Fluent smart contract.
+
+  This function handles verification for Fluent contracts from both Git
+  repositories and source code archives. It validates the unified request
+  payload and queues a single job type to be processed asynchronously by the
+  `FluentPublisherWorker`.
+
+  ## Parameters
+  - `conn`: The connection struct.
+  - `params`: A map containing the full verification payload:
+    - `address_hash`: Contract address to verify.
+    - `contract_name`: The name of the contract.
+    - `abi`: The contract's ABI.
+    - `compile_settings`: Compilation settings.
+    - `git_source` (optional): Git source details.
+    - `archive_source` (optional): Archive source details.
+
+  ## Returns
+  - A JSON response indicating that the verification has started, or an error.
+  """
+  @spec verification_via_fluent(Plug.Conn.t(), %{String.t() => any()}) :: Plug.Conn.t()
+  def verification_via_fluent(
+        conn,
+        %{
+          "address_hash" => address_hash_string,
+          "contract_name" => _,
+          "abi" => _,
+          "compile_settings" => _
+        } = params
+      ) do
+    Logger.info("API v2: Fluent smart-contract #{address_hash_string} verification request received.")
+
+    with {:not_found, true} <- {:not_found, FluentVerifierInterface.enabled?()},
+         :validated <- validate_address(params),
+         # Add specific validation for Fluent requests
+         :source_validated <- validate_fluent_source(params) do
+      # All checks passed, queue the unified job
+      log_sc_verification_started(address_hash_string)
+      Que.add(FluentPublisherWorker, {"fluent", params})
+
+      conn
+      |> put_view(ApiView)
+      |> render(:message, %{message: @sc_verification_started})
+    end
+  end
+
+  # The old functions are now removed.
+  # def verification_via_fluent_github_repository(conn, params) ...
+  # def verification_via_fluent_archive(conn, params) ...
+
+  # New validation helper specific to Fluent verification requests.
+  defp validate_fluent_source(params) do
+    has_git_source = Map.has_key?(params, "git_source")
+    has_archive_source = Map.has_key?(params, "archive_source")
+
+    case {has_git_source, has_archive_source} do
+      {true, false} -> :source_validated
+      {false, true} -> :source_validated
+      {true, true} -> {:error, "Request must contain either 'git_source' or 'archive_source', but not both."}
+      {false, false} -> {:error, "Request must contain either 'git_source' or 'archive_source'."}
     end
   end
 

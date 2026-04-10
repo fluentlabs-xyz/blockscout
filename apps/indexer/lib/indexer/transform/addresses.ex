@@ -82,8 +82,11 @@ defmodule Indexer.Transform.Addresses do
       else
         [
           %{from: :block_number, to: :fetched_coin_balance_block_number},
-          %{from: :created_contract_address_hash, to: :hash},
-          %{from: :created_contract_code, to: :contract_code}
+          %{from: :created_contract_address_hash, to: :hash}
+          # TODO(d1r1): Create @chain_type fluent and move this there
+          # We can't use created_contract_code from internal transactions since it's always will return 0x
+          # this happens since we are using reth and do not return output field for CREATE type internal transactions
+          # %{from: :created_contract_code, to: :contract_code}
         ]
       end
     ],

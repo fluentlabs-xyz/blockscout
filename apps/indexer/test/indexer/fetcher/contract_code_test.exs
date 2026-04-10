@@ -157,6 +157,42 @@ defmodule Indexer.Fetcher.ContractCodeTest do
       updated_transaction = Repo.get!(Transaction, transaction.hash)
       assert updated_transaction.created_contract_code_indexed_at
     end
+
+    @tag :fetch_code_with_retries
+    test "retries when code is empty", %{json_rpc_named_arguments: json_rpc_named_arguments} do
+      block = insert(:block, number: 100)
+      address = insert(:address)
+
+      entry = %{
+        block_number: 100,
+        created_contract_address_hash: address.hash,
+        hash: insert(:transaction).hash,
+        type: nil,
+        status: :ok
+      }
+
+      code = "0x6060604052"
+
+      # Call 1: empty, Call 2: empty, Call 3: real code (retry works)
+      EthereumJSONRPC.Mox
+      |> expect(:json_rpc, fn [%{method: "eth_getCode"}], _ ->
+        {:ok, [%{id: 0, result: "0x"}]}
+      end)
+      |> expect(:json_rpc, fn [%{method: "eth_getCode"}], _ ->
+        {:ok, [%{id: 0, result: "0x"}]}
+      end)
+      |> expect(:json_rpc, fn [%{method: "eth_getCode"}], _ ->
+        {:ok, [%{id: 0, result: code}]}
+      end)
+      |> expect(:json_rpc, fn [%{method: "eth_getBalance"}], _ ->
+        {:ok, [%{id: 0, result: "0x0"}]}
+      end)
+
+      assert :ok = ContractCode.run([entry], json_rpc_named_arguments)
+
+      address = Repo.get!(Address, address.hash)
+      assert to_string(address.contract_code) == code
+    end
   end
 
   defp wait(producer) do

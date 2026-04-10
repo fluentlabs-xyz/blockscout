@@ -30,6 +30,14 @@ defmodule Explorer.Chain.SmartContract.Schema do
                            ]
                          )
 
+    :fluent ->
+      @chain_type_fields quote(
+                           do: [
+                             field(:package_name, :string),
+                             field(:fluent_metadata, :map)
+                           ]
+                         )
+
     _ ->
       @chain_type_fields quote(do: [field(:optimization_runs, :integer)])
   end
@@ -151,6 +159,9 @@ defmodule Explorer.Chain.SmartContract do
                                 :arbitrum ->
                                   ~w(package_name github_repository_metadata)a
 
+                                :fluent ->
+                                  ~w(package_name fluent_metadata)a
+
                                 :zilliqa ->
                                   ~w(compiler_version)a
 
@@ -189,7 +200,7 @@ defmodule Explorer.Chain.SmartContract do
     }
   ]
 
-  @default_languages ~w(solidity vyper yul)a
+  @default_languages ~w(solidity vyper yul fluent_rust)a
   @chain_type_languages (case @chain_type do
                            :arbitrum ->
                              ~w(stylus_rust)a
@@ -210,6 +221,9 @@ defmodule Explorer.Chain.SmartContract do
   case @chain_type do
     :arbitrum ->
       @type language :: base_language() | :stylus_rust
+
+    :fluent ->
+      @type language :: base_language() | :fluent_rust
 
     :zilliqa ->
       @type language :: base_language() | :scilla
@@ -454,6 +468,10 @@ defmodule Explorer.Chain.SmartContract do
     :arbitrum -> """
        * `package_name` - package name of stylus contract.
        * `github_repository_metadata` - map with repository details.
+      """
+    :fluent -> """
+       * `package_name` - package name of fluent contract.
+       * `fluent_metadata` - map with build metadata from verification.
       """
     _ -> ""
   end}

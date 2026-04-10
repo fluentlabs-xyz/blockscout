@@ -13,6 +13,7 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
     Block,
     InternalTransaction,
     Log,
+    Hash,
     Token,
     Token.Instance,
     TokenTransfer,
@@ -31,6 +32,7 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
   import Mox
 
   @first_topic_hex_string_1 "0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65"
+  @runtime_upgraded_topic_hex_string "0x2b9d873d8fe3cc1332bb875ae358b40fd305d1776ebe63cc80bac10fd3cf057b"
   @instances_amount_in_collection 9
 
   setup :set_mox_global
@@ -2517,6 +2519,187 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
     end
   end
 
+  describe "/runtime-upgrades" do
+    @runtime_upgrades_address "0x0000000000000000000000000000000000520010"
+
+    test "get empty list when there are no runtime-upgrade logs", %{conn: conn} do
+      request = get(conn, "/api/v2/runtime-upgrades")
+
+      assert %{"items" => []} = json_response(request, 200)
+    end
+
+    test "aggregates runtime upgrades by genesis hash", %{conn: conn} do
+      {:ok, runtime_upgrades_address_hash} = Hash.Address.cast(@runtime_upgrades_address)
+
+      hash_1 = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      hash_2 = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      target_topic_1 = "0x0000000000000000000000000000000000000000000000000000000000000001"
+      target_topic_2 = "0x0000000000000000000000000000000000000000000000000000000000000002"
+      code_hash_1 = "0x1111111111111111111111111111111111111111111111111111111111111111"
+      code_hash_2 = "0x2222222222222222222222222222222222222222222222222222222222222222"
+
+      tx_1 = :transaction |> insert() |> with_block(status: :ok)
+      tx_2 = :transaction |> insert() |> with_block(status: :ok)
+      tx_3 = :transaction |> insert() |> with_block(status: :ok)
+
+      insert(:log,
+        transaction: tx_1,
+        block: tx_1.block,
+        block_number: tx_1.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      insert(:log,
+        transaction: tx_2,
+        block: tx_2.block,
+        block_number: tx_2.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("v1.1.0", code_hash_2)
+      )
+
+      # unrelated topic should be ignored
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 1,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@first_topic_hex_string_1),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("ignored", code_hash_2)
+      )
+
+      # same event on a different contract should be ignored
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 2,
+        address: insert(:address),
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("ignored", code_hash_2)
+      )
+
+      request = get(conn, "/api/v2/runtime-upgrades")
+
+      assert %{"items" => items} = json_response(request, 200)
+      assert length(items) == 2
+
+      by_hash = Map.new(items, fn item -> {item["genesis_hash"], item} end)
+
+      assert by_hash[hash_1]["genesis_version"] == "v1.0.0"
+      assert by_hash[hash_1]["upgrades_count"] == 2
+
+      assert by_hash[hash_2]["genesis_version"] == "v1.1.0"
+      assert by_hash[hash_2]["upgrades_count"] == 1
+    end
+  end
+
+  describe "/runtime-upgrades/{genesis_hash}" do
+    @runtime_upgrades_address "0x0000000000000000000000000000000000520010"
+
+    test "get 422 on invalid genesis hash", %{conn: conn} do
+      request = get(conn, "/api/v2/runtime-upgrades/0x1234")
+      assert %{"message" => "Invalid parameter(s)"} = json_response(request, 422)
+    end
+
+    test "returns upgrades for one genesis hash", %{conn: conn} do
+      {:ok, runtime_upgrades_address_hash} = Hash.Address.cast(@runtime_upgrades_address)
+
+      hash_1 = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      hash_2 = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      target_topic_1 = "0x0000000000000000000000000000000000000000000000000000000000000001"
+      target_topic_2 = "0x0000000000000000000000000000000000000000000000000000000000000002"
+      code_hash_1 = "0x1111111111111111111111111111111111111111111111111111111111111111"
+      code_hash_2 = "0x2222222222222222222222222222222222222222222222222222222222222222"
+
+      tx_1 = :transaction |> insert() |> with_block(status: :ok)
+      tx_2 = :transaction |> insert() |> with_block(status: :ok)
+      tx_3 = :transaction |> insert() |> with_block(status: :ok)
+
+      insert(:log,
+        transaction: tx_1,
+        block: tx_1.block,
+        block_number: tx_1.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      insert(:log,
+        transaction: tx_2,
+        block: tx_2.block,
+        block_number: tx_2.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      # different genesis hash should not be returned by /:genesis_hash endpoint
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("v1.1.0", code_hash_2)
+      )
+
+      request = get(conn, "/api/v2/runtime-upgrades/#{hash_1}")
+
+      assert %{"items" => items, "next_page_params" => nil} = json_response(request, 200)
+      assert length(items) == 2
+      assert Enum.all?(items, &(&1["genesis_hash"] == hash_1))
+      assert Enum.all?(items, &(&1["genesis_version"] == "v1.0.0"))
+      assert Enum.all?(items, &(&1["code_hash"] == code_hash_1))
+
+      assert Enum.all?(
+               items,
+               &(String.downcase(&1["target_address_hash"]) == "0x0000000000000000000000000000000000000001")
+             )
+    end
+  end
+
   describe "/addresses/{address_hash}/tokens" do
     test "get empty list on non existing address", %{conn: conn} do
       address = build(:address)
@@ -3997,6 +4180,27 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
              "image_url" => ^image_url,
              "is_unique" => nil
            } = json
+  end
+
+  defp runtime_upgraded_log_data(genesis_version, code_hash) do
+    stripped_hash = String.trim_leading(code_hash, "0x")
+    version_bytes = genesis_version
+    version_len = byte_size(version_bytes)
+    padded_len = div(version_len + 31, 32) * 32
+    padded_version_bytes = version_bytes <> :binary.copy(<<0>>, padded_len - version_len)
+
+    "0x" <>
+      encode_abi_word(32) <>
+      encode_abi_word(64) <>
+      stripped_hash <>
+      encode_abi_word(version_len) <>
+      Base.encode16(padded_version_bytes, case: :lower)
+  end
+
+  defp encode_abi_word(value) do
+    value
+    |> Integer.to_string(16)
+    |> String.pad_leading(64, "0")
   end
 
   defp value("ERC-721", _), do: 1

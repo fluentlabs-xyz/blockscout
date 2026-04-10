@@ -18,7 +18,19 @@ defmodule Indexer.Transform.Blocks do
   def transform_blocks(blocks) when is_list(blocks) do
     transformer = Application.get_env(:indexer, :block_transformer)
 
-    Enum.map(blocks, &transformer.transform/1)
+    blocks
+    |> Enum.map(&transformer.transform/1)
+    |> Enum.map(&maybe_override_miner/1)
+  end
+
+  @doc """
+  Overrides the miner address if static_validator_address is set in config.
+  """
+  defp maybe_override_miner(block) do
+    case Application.get_env(:indexer, :static_validator_address) do
+      nil -> block
+      validator_address -> Map.put(block, :miner_hash, validator_address)
+    end
   end
 
   @doc """

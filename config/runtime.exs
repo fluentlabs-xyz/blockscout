@@ -622,6 +622,9 @@ config :explorer, Explorer.MicroserviceInterfaces.Metadata,
 config :explorer, Explorer.SmartContract.StylusVerifierInterface,
   service_url: ConfigHelper.parse_microservice_url("MICROSERVICE_STYLUS_VERIFIER_URL")
 
+config :explorer, Explorer.SmartContract.FluentVerifierInterface,
+  service_url: ConfigHelper.parse_microservice_url("MICROSERVICE_FLUENT_VERIFIER_URL")
+
 config :explorer, Explorer.MicroserviceInterfaces.MultichainSearch,
   api_key: System.get_env("MICROSERVICE_MULTICHAIN_SEARCH_API_KEY"),
   service_url: System.get_env("MICROSERVICE_MULTICHAIN_SEARCH_URL"),
@@ -882,7 +885,12 @@ config :indexer,
     ConfigHelper.parse_integer_env_var("INDEXER_COIN_BALANCES_FETCHER_INIT_QUERY_LIMIT", 2000),
   graceful_shutdown_period: ConfigHelper.parse_time_env_var("INDEXER_GRACEFUL_SHUTDOWN_PERIOD", "5m"),
   internal_transactions_fetch_order:
-    ConfigHelper.parse_catalog_value("INDEXER_INTERNAL_TRANSACTIONS_FETCH_ORDER", ["asc", "desc"], true, "asc")
+    ConfigHelper.parse_catalog_value("INDEXER_INTERNAL_TRANSACTIONS_FETCH_ORDER", ["asc", "desc"], true, "asc"),
+  static_validator_address: System.get_env("FLUENT_VALIDATOR_ADDRESS")
+
+config :indexer, Indexer.Fetcher.ContractCode,
+  retry_attempts: ConfigHelper.parse_integer_env_var("INDEXER_CONTRACT_CODE_RETRY_ATTEMPTS", 3),
+  retry_delay_ms: ConfigHelper.parse_integer_env_var("INDEXER_CONTRACT_CODE_RETRY_DELAY_MS", 800)
 
 config :indexer, :ipfs,
   gateway_url: System.get_env("IPFS_GATEWAY_URL", "https://ipfs.io/ipfs"),

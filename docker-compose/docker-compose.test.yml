@@ -1,0 +1,31 @@
+version: "3.9"
+
+# Before running tests, run migrations with:
+# cd ~/..
+# export DATABASE_URL=postgresql://blockscout:password@localhost:5432/blockscout
+# MIX_ENV=test mix ecto.drop
+# MIX_ENV=test mix ecto.create
+# MIX_ENV=test mix ecto.migrate
+
+services:
+  db-init:
+    extends:
+      file: ./services/db.yml
+      service: db-init
+
+  db:
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    extends:
+      file: ./services/db.yml
+      service: db
+    container_name: "blockscout-db-test"
+    environment:
+      POSTGRES_DB: "blockscout"
+      POSTGRES_USER: "blockscout"
+      POSTGRES_PASSWORD: "password"
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./services/blockscout-db-test-data:/var/lib/postgresql/data

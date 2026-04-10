@@ -28,7 +28,7 @@ defmodule BlockScoutWeb.API.V2.AddressController do
   import Explorer.MicroserviceInterfaces.Metadata, only: [maybe_preload_metadata: 1]
 
   alias BlockScoutWeb.AccessHelper
-  alias BlockScoutWeb.API.V2.{BlockView, TransactionView, WithdrawalView}
+  alias BlockScoutWeb.API.V2.{AddressView, BlockView, TransactionView, WithdrawalView}
   alias Explorer.{Chain, Market}
   alias Explorer.Chain.{Address, Hash, InternalTransaction, Transaction}
   alias Explorer.Chain.Address.Counters
@@ -38,6 +38,12 @@ defmodule BlockScoutWeb.API.V2.AddressController do
 
   alias BlockScoutWeb.API.V2.CeloView
   alias Explorer.Chain.Celo.ElectionReward, as: CeloElectionReward
+
+  @runtime_upgrades_address "0x0000000000000000000000000000000000520010"
+  @runtime_upgrades_address_hash (case Hash.Address.cast(@runtime_upgrades_address) do
+                                    {:ok, address_hash} -> address_hash
+                                    _ -> nil
+                                  end)
   alias Explorer.Chain.Celo.Reader, as: CeloReader
 
   alias Indexer.Fetcher.OnDemand.CoinBalance, as: CoinBalanceOnDemand
@@ -497,6 +503,64 @@ defmodule BlockScoutWeb.API.V2.AddressController do
             next_page_params: nil
           })
       end
+    end
+  end
+
+  @doc """
+  Handles GET requests to `/api/v2/runtime-upgrades` endpoint.
+
+  Returns runtime-upgrade aggregates grouped by `genesis_hash` (EVM `topic2`, stored
+  as `third_topic` in Blockscout logs schema) for the `RuntimeUpgraded` event emitted
+  by the runtime-upgrade system contract at a fixed address.
+  """
+  @spec runtime_upgrades(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def runtime_upgrades(conn, _params) do
+    runtime_upgrades =
+      case @runtime_upgrades_address_hash do
+        nil -> []
+        address_hash -> Chain.address_to_runtime_upgrades(address_hash, @api_true)
+      end
+
+    conn
+    |> put_status(200)
+    |> put_view(AddressView)
+    |> render(:runtime_upgrades, %{runtime_upgrades: runtime_upgrades})
+  end
+
+  @doc """
+  Handles GET requests to `/api/v2/runtime-upgrades/:genesis_hash` endpoint.
+
+  Returns a paginated list of runtime-upgrade events for the given `genesis_hash` from
+  the fixed runtime-upgrade system contract.
+  """
+  @spec runtime_upgrades_by_genesis_hash(Plug.Conn.t(), map()) :: {:format, :error} | Plug.Conn.t()
+  def runtime_upgrades_by_genesis_hash(conn, %{"genesis_hash" => genesis_hash_param} = params) do
+    with {:ok, genesis_hash} <- validate_optional_topic(genesis_hash_param) do
+      {logs, next_page_params} =
+        case @runtime_upgrades_address_hash do
+          nil ->
+            {[], nil}
+
+          address_hash ->
+            options =
+              params
+              |> paging_options()
+              |> Keyword.merge(@api_true)
+
+            results_plus_one = Chain.runtime_upgrades_by_genesis_hash(address_hash, genesis_hash, options)
+            {logs, next_page} = split_list_by_page(results_plus_one)
+
+            next_page_params =
+              next_page
+              |> next_page_params(logs, delete_parameters_from_next_page_params(params))
+
+            {logs, next_page_params}
+        end
+
+      conn
+      |> put_status(200)
+      |> put_view(AddressView)
+      |> render(:runtime_upgrade_logs, %{logs: logs, next_page_params: next_page_params})
     end
   end
 
