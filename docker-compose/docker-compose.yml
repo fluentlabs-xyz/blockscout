@@ -38,6 +38,9 @@ services:
         ETHEREUM_JSONRPC_TRACE_URL: http://host.docker.internal:8545/
         ETHEREUM_JSONRPC_WS_URL: ws://host.docker.internal:8545/
         CHAIN_ID: '1337'
+        MICROSERVICE_FLUENT_VERIFIER_URL: http://fluent-verifier:8050
+        DATABASE_URL: ${DATABASE_URL}
+        PORT: "4000"
 
   nft_media_handler:
     depends_on:
@@ -105,3 +108,18 @@ services:
     extends:
       file: ./services/nginx.yml
       service: proxy
+
+  fluent-verifier:
+    user: root
+    image: ghcr.io/fluentlabs-xyz/fluent-verifier:latest
+    container_name: fluent-verifier
+    platform: linux/amd64
+    depends_on:
+      - backend
+    ports:
+      - "8089:8050"
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - RUST_LOG=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

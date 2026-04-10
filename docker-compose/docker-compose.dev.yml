@@ -1,0 +1,116 @@
+version: "3.9"
+
+services:
+  redis-db:
+    extends:
+      file: ./services/redis.yml
+      service: redis-db
+
+  db-init:
+    extends:
+      file: ./services/db.yml
+      service: db-init
+
+  db:
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    extends:
+      file: ./services/db.yml
+      service: db
+
+  backend:
+    depends_on:
+      - db
+      - redis-db
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+      args:
+        RELEASE_VERSION: ${RELEASE_VERSION:-8.1.1}
+        BLOCKSCOUT_VERSION: ${BLOCKSCOUT_VERSION:-v8.1.1}
+        CHAIN_TYPE: ${CHAIN_TYPE:-}
+        DISABLE_API: ${DISABLE_API:-false}
+        API_V1_READ_METHODS_DISABLED: ${API_V1_READ_METHODS_DISABLED:-false}
+        API_V1_WRITE_METHODS_DISABLED: ${API_V1_WRITE_METHODS_DISABLED:-false}
+        BRIDGED_TOKENS_ENABLED: ${BRIDGED_TOKENS_ENABLED:-false}
+        API_GRAPHQL_MAX_COMPLEXITY: ${API_GRAPHQL_MAX_COMPLEXITY:-}
+    image: blockscout-fluent-dev:local
+    restart: always
+    stop_grace_period: 5m
+    container_name: "backend"
+    command: sh -c "bin/blockscout eval \"Elixir.Explorer.ReleaseTasks.create_and_migrate()\" && bin/blockscout start"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    links:
+      - db:database
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: "4000"
+      ETHEREUM_JSONRPC_HTTP_URL: http://host.docker.internal:8545/
+      ETHEREUM_JSONRPC_TRACE_URL: http://host.docker.internal:8545/
+      CHAIN_ID: 20994
+      FLUENT_VALIDATOR_ADDRESS: ${FLUENT_VALIDATOR_ADDRESS:-0x0000000000000000000000000000000000520fee}
+    volumes:
+      - ./logs/:/app/logs/
+      - ./dets/:/app/dets/
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+  visualizer:
+    extends:
+      file: ./services/visualizer.yml
+      service: visualizer
+
+  sig-provider:
+    extends:
+      file: ./services/sig-provider.yml
+      service: sig-provider
+
+  frontend:
+    depends_on:
+      - backend
+    extends:
+      file: ./services/frontend.yml
+      service: frontend
+    environment:
+      - BLOCKSCOUT_FRONTEND_DOCKER_TAG=v0.1.6
+
+  stats-db-init:
+    extends:
+      file: ./services/stats.yml
+      service: stats-db-init
+
+  stats-db:
+    depends_on:
+      stats-db-init:
+        condition: service_completed_successfully
+    extends:
+      file: ./services/stats.yml
+      service: stats-db
+
+  stats:
+    depends_on:
+      - stats-db
+      - backend
+    extends:
+      file: ./services/stats.yml
+      service: stats
+
+  proxy:
+    image: nginx:alpine
+    container_name: proxy
+    restart: always
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - "./proxy-dev:/etc/nginx/templates"
+    ports:
+      - "80:80"
+      - "8080:8080"
+      - "8081:8081"

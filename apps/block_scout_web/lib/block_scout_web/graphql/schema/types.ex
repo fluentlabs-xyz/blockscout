@@ -136,6 +136,9 @@ defmodule BlockScoutWeb.GraphQL.Schema.Types do
     :zilliqa ->
       @chain_type_languages ~w(scilla)a
 
+    :fluent ->
+      @chain_type_languages ~w(fluent_rust)a
+
     _ ->
       @chain_type_languages ~w()a
   end

@@ -6,14 +6,37 @@ services:
       file: ./services/redis.yml
       service: redis-db
 
+  db-init:
+    extends:
+      file: ./services/db.yml
+      service: db-init
+
+  db:
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    extends:
+      file: ./services/db.yml
+      service: db
+
   backend:
     depends_on:
+      - db
       - redis-db
     extends:
       file: ./services/backend.yml
       service: backend
+    links:
+      - db:database
     environment:
-        ETHEREUM_JSONRPC_VARIANT: 'geth'
+        ETHEREUM_JSONRPC_VARIANT: 'anvil'
+        ETHEREUM_JSONRPC_WS_URL: ws://host.docker.internal:8545/
+        INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER: 'true'
+        INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: 'true'
+        CHAIN_ID: '31337'
+        MICROSERVICE_FLUENT_VERIFIER_URL: http://fluent-verifier:8050
+        DATABASE_URL: ${DATABASE_URL}
+        PORT: "4000"
 
   visualizer:
     extends:
@@ -31,6 +54,9 @@ services:
     extends:
       file: ./services/frontend.yml
       service: frontend
+    environment:
+      NEXT_PUBLIC_NETWORK_ID: '31337'
+      NEXT_PUBLIC_NETWORK_RPC_URL: http://host.docker.internal:8545/
 
   stats-db-init:
     extends:
@@ -55,6 +81,7 @@ services:
 
   user-ops-indexer:
     depends_on:
+      - db
       - backend
     extends:
       file: ./services/user-ops-indexer.yml
@@ -68,3 +95,18 @@ services:
     extends:
       file: ./services/nginx.yml
       service: proxy
+
+  fluent-verifier:
+    user: root
+    image: ghcr.io/fluentlabs-xyz/fluent-verifier:latest
+    container_name: fluent-verifier
+    platform: linux/amd64
+    depends_on:
+      - backend
+    ports:
+      - "8089:8050"
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - RUST_LOG=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

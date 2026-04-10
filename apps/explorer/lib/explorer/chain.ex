@@ -84,6 +84,8 @@ defmodule Explorer.Chain do
   @default_page_size 50
   @default_paging_options %PagingOptions{page_size: @default_page_size}
 
+  @runtime_upgraded_topic_hash "0x2b9d873d8fe3cc1332bb875ae358b40fd305d1776ebe63cc80bac10fd3cf057b"
+
   @token_transfers_per_transaction_preview 10
 
   @revert_msg_prefix_1 "Revert: "
@@ -251,6 +253,161 @@ defmodule Explorer.Chain do
         log.first_topic == ^topic or log.second_topic == ^topic or log.third_topic == ^topic or
           log.fourth_topic == ^topic
     )
+  end
+
+  @doc """
+  Returns paginated runtime-upgrade logs for a specific `genesis_hash`
+  (EVM `topic2`, stored as `third_topic` in Blockscout logs schema).
+  """
+  @spec runtime_upgrades_by_genesis_hash(Hash.Address.t(), Hash.Full.t(), [paging_options | api?]) :: [Log.t()]
+  def runtime_upgrades_by_genesis_hash(address_hash, genesis_hash, options \\ []) when is_list(options) do
+    paging_options = Keyword.get(options, :paging_options) || @default_paging_options
+
+    case paging_options do
+      %PagingOptions{key: {0, 0}} ->
+        []
+
+      _ ->
+        from_block = from_block(options)
+        to_block = to_block(options)
+
+        from(log in Log,
+          order_by: [desc: log.block_number, desc: log.index],
+          where: log.address_hash == ^address_hash,
+          where: log.first_topic == ^@runtime_upgraded_topic_hash,
+          where: log.third_topic == ^genesis_hash,
+          limit: ^paging_options.page_size,
+          select: log,
+          inner_join: block in Block,
+          on: block.hash == log.block_hash,
+          where: block.consensus == true,
+          preload: [:block]
+        )
+        |> page_logs(paging_options)
+        |> BlockReaderGeneral.where_block_number_in_period(from_block, to_block)
+        |> select_repo(options).all()
+        |> Enum.take(paging_options.page_size)
+    end
+  end
+
+  @doc """
+  Returns runtime-upgrade aggregates for an address grouped by `genesis_hash`
+  (EVM `topic2`, stored as `third_topic` in Blockscout logs schema).
+
+  The query filters logs by the `RuntimeUpgraded` event signature and produces one item per
+  `genesis_hash` with:
+  - `genesis_hash`
+  - `genesis_version` (decoded from event data)
+  - `upgrades_count`
+  """
+  @spec address_to_runtime_upgrades(Hash.Address.t(), [api?]) :: [map()]
+  def address_to_runtime_upgrades(address_hash, options \\ []) when is_list(options) do
+    from_block = from_block(options)
+    to_block = to_block(options)
+
+    base_query =
+      from(log in Log,
+        where: log.address_hash == ^address_hash,
+        where: log.first_topic == ^@runtime_upgraded_topic_hash,
+        where: not is_nil(log.third_topic),
+        inner_join: block in Block,
+        on: block.hash == log.block_hash,
+        where: block.consensus == true
+      )
+      |> BlockReaderGeneral.where_block_number_in_period(from_block, to_block)
+
+    grouped_rows =
+      from(log in base_query,
+        group_by: log.third_topic,
+        select: %{
+          genesis_hash: log.third_topic,
+          upgrades_count: count(log.index),
+          latest_block_number: max(log.block_number)
+        }
+      )
+      |> select_repo(options).all()
+
+    latest_data_by_hash =
+      from(log in base_query,
+        distinct: log.third_topic,
+        order_by: [asc: log.third_topic, desc: log.block_number, desc: log.index],
+        select: %{genesis_hash: log.third_topic, data: log.data}
+      )
+      |> select_repo(options).all()
+      |> Map.new(fn %{genesis_hash: genesis_hash, data: data} -> {genesis_hash, data} end)
+
+    grouped_rows
+    |> Enum.map(fn grouped_row ->
+      %{
+        genesis_hash: grouped_row.genesis_hash,
+        genesis_version:
+          latest_data_by_hash
+          |> Map.get(grouped_row.genesis_hash)
+          |> decode_runtime_upgrade_genesis_version(),
+        upgrades_count: grouped_row.upgrades_count,
+        latest_block_number: grouped_row.latest_block_number
+      }
+    end)
+    |> Enum.sort_by(& &1.latest_block_number, :desc)
+    |> Enum.map(&Map.delete(&1, :latest_block_number))
+  end
+
+  defp decode_runtime_upgrade_genesis_version(%Data{bytes: bytes}) when is_binary(bytes) do
+    if byte_size(bytes) < 32 do
+      nil
+    else
+      tuple_offset = decode_word(bytes, 0)
+
+      decode_tuple_encoded_runtime_upgrade_genesis_version(bytes, tuple_offset) ||
+        decode_dynamic_string(bytes, 0) ||
+        decode_dynamic_string(bytes, tuple_offset)
+    end
+  end
+
+  defp decode_runtime_upgrade_genesis_version(_), do: nil
+
+  defp decode_tuple_encoded_runtime_upgrade_genesis_version(bytes, tuple_offset) do
+    with true <- is_integer(tuple_offset) and tuple_offset >= 0,
+         true <- tuple_offset + 64 <= byte_size(bytes),
+         string_relative_offset <- decode_word(bytes, tuple_offset),
+         true <- is_integer(string_relative_offset),
+         string_length_offset <- tuple_offset + string_relative_offset,
+         true <- string_length_offset + 32 <= byte_size(bytes),
+         string_length <- decode_word(bytes, string_length_offset),
+         true <- is_integer(string_length) and string_length >= 0,
+         string_offset <- string_length_offset + 32,
+         true <- string_offset + string_length <= byte_size(bytes),
+         string_binary <- binary_part(bytes, string_offset, string_length),
+         true <- String.valid?(string_binary) do
+      string_binary
+    else
+      _ -> nil
+    end
+  end
+
+  defp decode_dynamic_string(bytes, head_offset) do
+    with true <- is_integer(head_offset) and head_offset >= 0,
+         true <- head_offset + 32 <= byte_size(bytes),
+         string_offset <- decode_word(bytes, head_offset),
+         true <- is_integer(string_offset),
+         length_offset <- head_offset + string_offset,
+         true <- length_offset + 32 <= byte_size(bytes),
+         string_length <- decode_word(bytes, length_offset),
+         true <- is_integer(string_length) and string_length >= 0,
+         string_offset <- length_offset + 32,
+         true <- string_offset + string_length <= byte_size(bytes),
+         string_binary <- binary_part(bytes, string_offset, string_length),
+         true <- String.valid?(string_binary) do
+      string_binary
+    else
+      _ -> nil
+    end
+  end
+
+  defp decode_word(bytes, offset) do
+    bytes
+    |> binary_part(offset, 32)
+    |> :binary.decode_unsigned()
   end
 
   @doc """

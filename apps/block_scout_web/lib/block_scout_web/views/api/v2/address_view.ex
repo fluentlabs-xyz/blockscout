@@ -72,6 +72,17 @@ defmodule BlockScoutWeb.API.V2.AddressView do
     %{"items" => Enum.map(nft_collections, &prepare_nft_collection(&1)), "next_page_params" => next_page_params}
   end
 
+  def render("runtime_upgrades.json", %{runtime_upgrades: runtime_upgrades}) do
+    %{"items" => Enum.map(runtime_upgrades, &prepare_runtime_upgrade/1)}
+  end
+
+  def render("runtime_upgrade_logs.json", %{logs: logs, next_page_params: next_page_params}) do
+    %{
+      "items" => Enum.map(logs, &prepare_runtime_upgrade_log/1),
+      "next_page_params" => next_page_params
+    }
+  end
+
   @doc """
   Prepares an address for display in the addresses list.
 
@@ -166,6 +177,112 @@ defmodule BlockScoutWeb.API.V2.AddressView do
       "date" => coin_balance_by_day.date,
       "value" => coin_balance_by_day.value
     }
+  end
+
+  defp prepare_runtime_upgrade(runtime_upgrade) do
+    %{
+      "genesis_hash" => to_string(runtime_upgrade.genesis_hash),
+      "genesis_version" => runtime_upgrade.genesis_version,
+      "upgrades_count" => runtime_upgrade.upgrades_count
+    }
+  end
+
+  defp prepare_runtime_upgrade_log(log) do
+    %{
+      "transaction_hash" => log.transaction_hash,
+      "block_number" => log.block_number,
+      "log_index" => log.index,
+      "block_timestamp" => log.block && log.block.timestamp,
+      "target_address_hash" => decode_topic_address(log.second_topic),
+      "genesis_hash" => log.third_topic && to_string(log.third_topic),
+      "genesis_version" => decode_runtime_upgrade_genesis_version(log.data),
+      "code_hash" => decode_runtime_upgrade_code_hash(log.data)
+    }
+  end
+
+  defp decode_topic_address(nil), do: nil
+
+  defp decode_topic_address(topic) do
+    with "0x" <> full_hash <- to_string(topic),
+         true <- byte_size(full_hash) == 64,
+         address_hex <- binary_part(full_hash, 24, 40),
+         {:ok, address_hash} <- Chain.string_to_address_hash("0x" <> address_hex) do
+      to_string(address_hash)
+    else
+      _ -> nil
+    end
+  end
+
+  defp decode_runtime_upgrade_genesis_version(%Chain.Data{bytes: bytes}) when is_binary(bytes) do
+    if byte_size(bytes) < 32 do
+      nil
+    else
+      tuple_offset = decode_word(bytes, 0)
+
+      decode_tuple_genesis_version(bytes, tuple_offset) ||
+        decode_dynamic_string(bytes, 0) ||
+        decode_dynamic_string(bytes, tuple_offset)
+    end
+  end
+
+  defp decode_runtime_upgrade_genesis_version(_), do: nil
+
+  defp decode_runtime_upgrade_code_hash(%Chain.Data{bytes: bytes}) when is_binary(bytes) do
+    with true <- byte_size(bytes) >= 64,
+         tuple_offset <- decode_word(bytes, 0),
+         true <- is_integer(tuple_offset) and tuple_offset >= 0,
+         true <- tuple_offset + 64 <= byte_size(bytes),
+         code_hash_bytes <- binary_part(bytes, tuple_offset + 32, 32) do
+      "0x" <> Base.encode16(code_hash_bytes, case: :lower)
+    else
+      _ -> nil
+    end
+  end
+
+  defp decode_runtime_upgrade_code_hash(_), do: nil
+
+  defp decode_tuple_genesis_version(bytes, tuple_offset) do
+    with true <- is_integer(tuple_offset) and tuple_offset >= 0,
+         true <- tuple_offset + 64 <= byte_size(bytes),
+         string_relative_offset <- decode_word(bytes, tuple_offset),
+         true <- is_integer(string_relative_offset),
+         string_length_offset <- tuple_offset + string_relative_offset,
+         true <- string_length_offset + 32 <= byte_size(bytes),
+         string_length <- decode_word(bytes, string_length_offset),
+         true <- is_integer(string_length) and string_length >= 0,
+         string_offset <- string_length_offset + 32,
+         true <- string_offset + string_length <= byte_size(bytes),
+         string_binary <- binary_part(bytes, string_offset, string_length),
+         true <- String.valid?(string_binary) do
+      string_binary
+    else
+      _ -> nil
+    end
+  end
+
+  defp decode_dynamic_string(bytes, head_offset) do
+    with true <- is_integer(head_offset) and head_offset >= 0,
+         true <- head_offset + 32 <= byte_size(bytes),
+         string_offset <- decode_word(bytes, head_offset),
+         true <- is_integer(string_offset),
+         length_offset <- head_offset + string_offset,
+         true <- length_offset + 32 <= byte_size(bytes),
+         string_length <- decode_word(bytes, length_offset),
+         true <- is_integer(string_length) and string_length >= 0,
+         string_offset <- length_offset + 32,
+         true <- string_offset + string_length <= byte_size(bytes),
+         string_binary <- binary_part(bytes, string_offset, string_length),
+         true <- String.valid?(string_binary) do
+      string_binary
+    else
+      _ -> nil
+    end
+  end
+
+  defp decode_word(bytes, offset) do
+    bytes
+    |> binary_part(offset, 32)
+    |> :binary.decode_unsigned()
   end
 
   def get_watchlist_id(conn) do

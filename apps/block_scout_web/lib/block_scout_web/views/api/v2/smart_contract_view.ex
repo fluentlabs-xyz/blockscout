@@ -409,6 +409,13 @@ defmodule BlockScoutWeb.API.V2.SmartContractView do
         |> Map.put("github_repository_metadata", target_contract.github_repository_metadata)
       end
 
+    :fluent ->
+      defp chain_type_fields(result, %{target_contract: target_contract}, _single?) do
+        result
+        |> Map.put("package_name", target_contract.package_name)
+        |> Map.put("fluent_metadata", target_contract.fluent_metadata)
+      end
+
     :zksync ->
       defp chain_type_fields(result, %{target_contract: target_contract}, _single?) do
         result

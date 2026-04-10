@@ -4,7 +4,7 @@ defmodule Explorer.SmartContract.CompilerVersion do
   """
 
   alias Explorer.{Helper, HttpClient}
-  alias Explorer.SmartContract.{RustVerifierInterface, StylusVerifierInterface}
+  alias Explorer.SmartContract.{RustVerifierInterface, StylusVerifierInterface, FluentVerifierInterface}
 
   @unsupported_solc_versions ~w(0.1.1 0.1.2)
   @unsupported_vyper_versions ~w(v0.2.9 v0.2.10)
@@ -12,7 +12,7 @@ defmodule Explorer.SmartContract.CompilerVersion do
   @doc """
   Fetches a list of compilers from the Ethereum Solidity API.
   """
-  @spec fetch_versions(:solc | :vyper | :zk | :stylus) :: {atom, [binary()]}
+  @spec fetch_versions(:solc | :vyper | :zk | :stylus | :fluent) :: {atom, [binary()]}
   def fetch_versions(compiler)
 
   def fetch_versions(:solc) do
@@ -31,6 +31,10 @@ defmodule Explorer.SmartContract.CompilerVersion do
     fetch_compiler_versions(&StylusVerifierInterface.get_versions_list/0, :stylus)
   end
 
+  def fetch_versions(:fluent) do
+    fetch_compiler_versions(&FluentVerifierInterface.get_versions_list/0, :fluent)
+  end
+
   @doc """
   Fetches the list of compiler versions for the given compiler.
 
@@ -43,7 +47,7 @@ defmodule Explorer.SmartContract.CompilerVersion do
     - A list of available compiler versions.
 
   """
-  @spec fetch_version_list(:solc | :vyper | :zk | :stylus) :: [binary()]
+  @spec fetch_version_list(:solc | :vyper | :zk | :stylus | :fluent) :: [binary()]
   def fetch_version_list(compiler) do
     case fetch_versions(compiler) do
       {:ok, compiler_versions} ->
@@ -56,6 +60,14 @@ defmodule Explorer.SmartContract.CompilerVersion do
 
   defp fetch_compiler_versions(compiler_list_fn, :stylus = compiler_type) do
     if StylusVerifierInterface.enabled?() do
+      fetch_compiler_versions_sc_verified_enabled(compiler_list_fn, compiler_type)
+    else
+      {:ok, []}
+    end
+  end
+
+  defp fetch_compiler_versions(compiler_list_fn, :fluent = compiler_type) do
+    if FluentVerifierInterface.enabled?() do
       fetch_compiler_versions_sc_verified_enabled(compiler_list_fn, compiler_type)
     else
       {:ok, []}

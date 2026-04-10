@@ -14,6 +14,7 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
     Block,
     InternalTransaction,
     Log,
+    Hash,
     Token,
     Token.Instance,
     TokenTransfer,
@@ -32,6 +33,7 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
   import Mox
 
   @first_topic_hex_string_1 "0x7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65"
+  @runtime_upgraded_topic_hex_string "0x2b9d873d8fe3cc1332bb875ae358b40fd305d1776ebe63cc80bac10fd3cf057b"
   @instances_amount_in_collection 9
   @resolved_delegate_proxy "0x608060408181523060009081526001602090815282822054908290529181207FBF40FAC1000000000000000000000000000000000000000000000000000000009093529173FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF9091169063BF40FAC19061006D9060846101E2565B602060405180830381865AFA15801561008A573D6000803E3D6000FD5B505050506040513D601F19601F820116820180604052508101906100AE91906102C5565B905073FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF8116610157576040517F08C379A000000000000000000000000000000000000000000000000000000000815260206004820152603960248201527F5265736F6C76656444656C656761746550726F78793A2074617267657420616460448201527F6472657373206D75737420626520696E697469616C697A656400000000000000606482015260840160405180910390FD5B6000808273FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF16600036604051610182929190610302565B600060405180830381855AF49150503D80600081146101BD576040519150601F19603F3D011682016040523D82523D6000602084013E6101C2565B606091505B5090925090508115156001036101DA57805160208201F35B805160208201FD5B600060208083526000845481600182811C91508083168061020457607F831692505B858310810361023A577F4E487B710000000000000000000000000000000000000000000000000000000085526022600452602485FD5B878601838152602001818015610257576001811461028B576102B6565B7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF008616825284151560051B820196506102B6565B60008B81526020902060005B868110156102B057815484820152908501908901610297565B83019750505B50949998505050505050505050565B6000602082840312156102D757600080FD5B815173FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF811681146102FB57600080FD5B9392505050565B818382376000910190815291905056FEA164736F6C634300080F000A"
 
@@ -3235,6 +3237,187 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
     end
   end
 
+  describe "/runtime-upgrades" do
+    @runtime_upgrades_address "0x0000000000000000000000000000000000520010"
+
+    test "get empty list when there are no runtime-upgrade logs", %{conn: conn} do
+      request = get(conn, "/api/v2/runtime-upgrades")
+
+      assert %{"items" => []} = json_response(request, 200)
+    end
+
+    test "aggregates runtime upgrades by genesis hash", %{conn: conn} do
+      {:ok, runtime_upgrades_address_hash} = Hash.Address.cast(@runtime_upgrades_address)
+
+      hash_1 = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      hash_2 = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      target_topic_1 = "0x0000000000000000000000000000000000000000000000000000000000000001"
+      target_topic_2 = "0x0000000000000000000000000000000000000000000000000000000000000002"
+      code_hash_1 = "0x1111111111111111111111111111111111111111111111111111111111111111"
+      code_hash_2 = "0x2222222222222222222222222222222222222222222222222222222222222222"
+
+      tx_1 = :transaction |> insert() |> with_block(status: :ok)
+      tx_2 = :transaction |> insert() |> with_block(status: :ok)
+      tx_3 = :transaction |> insert() |> with_block(status: :ok)
+
+      insert(:log,
+        transaction: tx_1,
+        block: tx_1.block,
+        block_number: tx_1.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      insert(:log,
+        transaction: tx_2,
+        block: tx_2.block,
+        block_number: tx_2.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("v1.1.0", code_hash_2)
+      )
+
+      # unrelated topic should be ignored
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 1,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@first_topic_hex_string_1),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("ignored", code_hash_2)
+      )
+
+      # same event on a different contract should be ignored
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 2,
+        address: insert(:address),
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("ignored", code_hash_2)
+      )
+
+      request = get(conn, "/api/v2/runtime-upgrades")
+
+      assert %{"items" => items} = json_response(request, 200)
+      assert length(items) == 2
+
+      by_hash = Map.new(items, fn item -> {item["genesis_hash"], item} end)
+
+      assert by_hash[hash_1]["genesis_version"] == "v1.0.0"
+      assert by_hash[hash_1]["upgrades_count"] == 2
+
+      assert by_hash[hash_2]["genesis_version"] == "v1.1.0"
+      assert by_hash[hash_2]["upgrades_count"] == 1
+    end
+  end
+
+  describe "/runtime-upgrades/{genesis_hash}" do
+    @runtime_upgrades_address "0x0000000000000000000000000000000000520010"
+
+    test "get 422 on invalid genesis hash", %{conn: conn} do
+      request = get(conn, "/api/v2/runtime-upgrades/0x1234")
+      assert %{"message" => "Invalid parameter(s)"} = json_response(request, 422)
+    end
+
+    test "returns upgrades for one genesis hash", %{conn: conn} do
+      {:ok, runtime_upgrades_address_hash} = Hash.Address.cast(@runtime_upgrades_address)
+
+      hash_1 = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      hash_2 = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      target_topic_1 = "0x0000000000000000000000000000000000000000000000000000000000000001"
+      target_topic_2 = "0x0000000000000000000000000000000000000000000000000000000000000002"
+      code_hash_1 = "0x1111111111111111111111111111111111111111111111111111111111111111"
+      code_hash_2 = "0x2222222222222222222222222222222222222222222222222222222222222222"
+
+      tx_1 = :transaction |> insert() |> with_block(status: :ok)
+      tx_2 = :transaction |> insert() |> with_block(status: :ok)
+      tx_3 = :transaction |> insert() |> with_block(status: :ok)
+
+      insert(:log,
+        transaction: tx_1,
+        block: tx_1.block,
+        block_number: tx_1.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      insert(:log,
+        transaction: tx_2,
+        block: tx_2.block,
+        block_number: tx_2.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_1),
+        third_topic: TestHelper.topic(hash_1),
+        data: runtime_upgraded_log_data("v1.0.0", code_hash_1)
+      )
+
+      # different genesis hash should not be returned by /:genesis_hash endpoint
+      insert(:log,
+        transaction: tx_3,
+        block: tx_3.block,
+        block_number: tx_3.block_number,
+        index: 0,
+        address_hash: runtime_upgrades_address_hash,
+        address: nil,
+        first_topic: TestHelper.topic(@runtime_upgraded_topic_hex_string),
+        second_topic: TestHelper.topic(target_topic_2),
+        third_topic: TestHelper.topic(hash_2),
+        data: runtime_upgraded_log_data("v1.1.0", code_hash_2)
+      )
+
+      request = get(conn, "/api/v2/runtime-upgrades/#{hash_1}")
+
+      assert %{"items" => items, "next_page_params" => nil} = json_response(request, 200)
+      assert length(items) == 2
+      assert Enum.all?(items, &(&1["genesis_hash"] == hash_1))
+      assert Enum.all?(items, &(&1["genesis_version"] == "v1.0.0"))
+      assert Enum.all?(items, &(&1["code_hash"] == code_hash_1))
+
+      assert Enum.all?(
+               items,
+               &(String.downcase(&1["target_address_hash"]) == "0x0000000000000000000000000000000000000001")
+             )
+    end
+  end
+
   describe "/addresses/{address_hash}/tokens" do
     test "get token balances with ok reputation", %{conn: conn} do
       init_value = Application.get_env(:block_scout_web, :hide_scam_addresses)
@@ -5872,6 +6055,27 @@ defmodule BlockScoutWeb.API.V2.AddressControllerTest do
              "image_url" => ^image_url,
              "is_unique" => nil
            } = json
+  end
+
+  defp runtime_upgraded_log_data(genesis_version, code_hash) do
+    stripped_hash = String.trim_leading(code_hash, "0x")
+    version_bytes = genesis_version
+    version_len = byte_size(version_bytes)
+    padded_len = div(version_len + 31, 32) * 32
+    padded_version_bytes = version_bytes <> :binary.copy(<<0>>, padded_len - version_len)
+
+    "0x" <>
+      encode_abi_word(32) <>
+      encode_abi_word(64) <>
+      stripped_hash <>
+      encode_abi_word(version_len) <>
+      Base.encode16(padded_version_bytes, case: :lower)
+  end
+
+  defp encode_abi_word(value) do
+    value
+    |> Integer.to_string(16)
+    |> String.pad_leading(64, "0")
   end
 
   defp value("ERC-721", _), do: 1

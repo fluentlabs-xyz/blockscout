@@ -31,3 +31,8 @@ config :logger, :block_import_timings,
 config :logger, :withdrawal,
   path: Path.absname("logs/dev/indexer/withdrawal.log"),
   metadata_filter: [fetcher: :withdrawal]
+
+config :logger, :contract_code,
+  level: :debug,
+  path: Path.absname("logs/dev/indexer/contract_code.log"),
+  metadata_filter: [fetcher: :code]

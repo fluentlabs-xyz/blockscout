@@ -1,0 +1,207 @@
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
+# Main server - Blockscout Explorer
+# Listen on all interfaces (0.0.0.0) to handle both localhost and 0.0.0.0 requests
+server {
+    listen       80;
+    listen       [::]:80;  # IPv6 support
+    server_name  localhost;
+    proxy_http_version 1.1;
+
+    # Stats service API endpoints
+    # Routes statistics-related requests to the stats microservice
+    location ~ ^/(api/v1/counters|api/v1/lines|api/v1/pages/main|api/v1/pages/transactions|api/v1/pages/contracts|api/v1/charts/batch-update) {
+        proxy_pass            http://stats:8050;
+        proxy_http_version    1.1;
+        proxy_set_header      Host $host;
+        proxy_set_header      X-Real-IP $remote_addr;
+        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header      X-Forwarded-Proto $scheme;
+        proxy_set_header      Upgrade $http_upgrade;
+        proxy_set_header      Connection $connection_upgrade;
+        proxy_cache_bypass    $http_upgrade;
+    }
+
+    # Backend API endpoints
+    # Routes all API calls, WebSocket connections, and auth requests to Blockscout backend
+    # Note: negative lookahead (?!-docs$) excludes /api-docs from being proxied here
+    location ~ ^/(api(?!-docs$)|socket|sitemap.xml|auth/auth0|auth/auth0/callback|auth/logout) {
+        proxy_pass            http://backend:4000;
+        proxy_http_version    1.1;
+        proxy_set_header      Host $host;
+        proxy_set_header      X-Real-IP $remote_addr;
+        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header      X-Forwarded-Proto $scheme;
+        proxy_set_header      Upgrade $http_upgrade;
+        proxy_set_header      Connection $connection_upgrade;
+        proxy_cache_bypass    $http_upgrade;
+    }
+
+    # Frontend UI
+    # Default location - serves the React/Next.js frontend application
+    location / {
+        proxy_pass            http://frontend:3000;
+        proxy_http_version    1.1;
+        proxy_set_header      Host $host;
+        proxy_set_header      X-Real-IP $remote_addr;
+        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header      X-Forwarded-Proto $scheme;
+        proxy_set_header      Upgrade $http_upgrade;
+        proxy_set_header      Connection $connection_upgrade;
+        proxy_cache_bypass    $http_upgrade;
+    }
+}
+
+# Stats service direct access with node-api proxy path support
+# This port is used by the frontend's Next.js API proxy to reach backend services
+server {
+    listen       8080;
+    listen       [::]:8080;
+    server_name  localhost;
+    proxy_http_version 1.1;
+    
+    # Hide upstream CORS headers to avoid conflicts
+    proxy_hide_header Access-Control-Allow-Origin;
+    proxy_hide_header Access-Control-Allow-Methods;
+    proxy_hide_header Access-Control-Allow-Headers;
+    proxy_hide_header Access-Control-Allow-Credentials;
+    
+    # Set CORS headers for all responses
+    add_header 'Access-Control-Allow-Origin' 'http://localhost' always;
+    add_header 'Access-Control-Allow-Credentials' 'true' always;
+    add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS, PATCH' always;
+    add_header 'Access-Control-Allow-Headers' 'DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,updated-gas-oracle,sec-ch-ua,sec-ch-ua-mobile,sec-ch-ua-platform' always;
+
+    # Frontend node-api proxy path for stats endpoints
+    # Routes /node-api/proxy/api/v1/* to stats service
+    location ~ ^/node-api/proxy/(api/v1/counters|api/v1/lines|api/v1/pages|api/v1/charts) {
+        # Handle preflight OPTIONS requests
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' 'http://localhost' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,updated-gas-oracle,sec-ch-ua,sec-ch-ua-mobile,sec-ch-ua-platform' always;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
+            add_header 'Access-Control-Max-Age' 1728000;
+            add_header 'Content-Type' 'text/plain; charset=utf-8';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
+
+        rewrite ^/node-api/proxy/(.*)$ /$1 break;
+        proxy_pass            http://stats:8050;
+        proxy_http_version    1.1;
+        proxy_set_header      Host $host;
+        proxy_set_header      X-Real-IP $remote_addr;
+        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header      X-Forwarded-Proto $scheme;
+        proxy_set_header      Upgrade $http_upgrade;
+        proxy_set_header      Connection $connection_upgrade;
+        proxy_cache_bypass    $http_upgrade;
+    }
+
+    # Frontend node-api proxy path for backend API
+    # Routes /node-api/proxy/api/v2/* and other backend endpoints
+    location /node-api/proxy/ {
+        # Handle preflight OPTIONS requests
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' 'http://localhost' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,updated-gas-oracle,sec-ch-ua,sec-ch-ua-mobile,sec-ch-ua-platform' always;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
+            add_header 'Access-Control-Max-Age' 1728000;
+            add_header 'Content-Type' 'text/plain; charset=utf-8';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
+
+        rewrite ^/node-api/proxy/(.*)$ /$1 break;
+        proxy_pass            http://backend:4000;
+        proxy_http_version    1.1;
+        proxy_set_header      Host $host;
+        proxy_set_header      X-Real-IP $remote_addr;
+        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header      X-Forwarded-Proto $scheme;
+        proxy_set_header      Upgrade $http_upgrade;
+        proxy_set_header      Connection $connection_upgrade;
+        proxy_cache_bypass    $http_upgrade;
+    }
+
+    # Direct stats API access (backward compatibility)
+    # For direct calls without /node-api/proxy prefix
+    location / {
+        # Handle preflight OPTIONS requests
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' 'http://localhost' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
+            add_header 'Access-Control-Max-Age' 1728000;
+            add_header 'Content-Type' 'text/plain; charset=utf-8';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
+
+        proxy_pass            http://stats:8050;
+        proxy_http_version    1.1;
+        proxy_set_header      Host $host;
+        proxy_set_header      X-Real-IP $remote_addr;
+        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header      X-Forwarded-Proto $scheme;
+        proxy_set_header      Upgrade $http_upgrade;
+        proxy_set_header      Connection $connection_upgrade;
+        proxy_cache_bypass    $http_upgrade;
+    }
+}
+
+# Visualizer service direct access
+# Listen on all interfaces with extended timeouts for long-running tasks
+server {
+    listen       8081;
+    listen       [::]:8081;
+    server_name  localhost;
+    proxy_http_version 1.1;
+    
+    # Hide upstream CORS headers to avoid conflicts
+    proxy_hide_header Access-Control-Allow-Origin;
+    proxy_hide_header Access-Control-Allow-Methods;
+    proxy_hide_header Access-Control-Allow-Headers;
+    
+    # Set CORS headers for all responses
+    add_header 'Access-Control-Allow-Origin' 'http://localhost' always;
+    add_header 'Access-Control-Allow-Credentials' 'true' always;
+    add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+    add_header 'Access-Control-Allow-Headers' 'DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,x-csrf-token' always;
+
+    location / {
+        # Handle preflight OPTIONS requests
+        if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' 'http://localhost' always;
+            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,x-csrf-token' always;
+            add_header 'Access-Control-Allow-Credentials' 'true' always;
+            add_header 'Access-Control-Max-Age' 1728000;
+            add_header 'Content-Type' 'text/plain; charset=utf-8';
+            add_header 'Content-Length' 0;
+            return 204;
+        }
+
+        proxy_pass            http://visualizer:8050;
+        proxy_http_version    1.1;
+        # Disable buffering for streaming responses
+        proxy_buffering       off;
+        proxy_set_header      Host $host;
+        proxy_set_header      X-Real-IP $remote_addr;
+        # Extended timeouts for long-running visualization tasks
+        proxy_connect_timeout 30m;
+        proxy_read_timeout    30m;
+        proxy_send_timeout    30m;
+        proxy_set_header      X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header      X-Forwarded-Proto $scheme;
+        proxy_set_header      Upgrade $http_upgrade;
+        proxy_set_header      Connection $connection_upgrade;
+        proxy_cache_bypass    $http_upgrade;
+    }
+}

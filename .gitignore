@@ -48,11 +48,15 @@ dump.rdb
 # mix phx.gen.cert self-signed certs for dev
 /apps/block_scout_web/priv/cert
 
+/docker-compose/services/blockscout-db-test-data
 /docker-compose/services/blockscout-db-data
 /docker-compose/services/stats-db-data
 /docker-compose/services/redis-data
 /docker-compose/services/logs
+/docker-compose/logs
 /docker-compose/tmp
+/docker-compose/envs/common-blockscout.env
+/docker-compose/envs/common-frontend.env
 
 .idea/
 *.iml
@@ -77,3 +81,14 @@ tasks_in_progress
 /temp
 
 openapi.yaml
+
+
+
+
+# postgres
+/pgdata
+/fluent-data
+
+
+/.wake
+
