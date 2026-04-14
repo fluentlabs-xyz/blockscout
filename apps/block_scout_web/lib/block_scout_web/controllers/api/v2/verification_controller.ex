@@ -44,16 +44,15 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
 
     verification_options = get_verification_options()
 
-    base_config =
-      %{
-        solidity_evm_versions: CodeCompiler.evm_versions(:solidity),
-        solidity_compiler_versions: solidity_compiler_versions,
-        vyper_compiler_versions: vyper_compiler_versions,
-        verification_options: verification_options,
-        vyper_evm_versions: CodeCompiler.evm_versions(:vyper),
-        is_rust_verifier_microservice_enabled: RustVerifierInterface.enabled?(),
-        license_types: Enum.into(SmartContract.license_types_enum(), %{})
-      }
+    base_config = %{
+      solidity_evm_versions: CodeCompiler.evm_versions(:solidity),
+      solidity_compiler_versions: solidity_compiler_versions,
+      vyper_compiler_versions: vyper_compiler_versions,
+      verification_options: verification_options,
+      vyper_evm_versions: CodeCompiler.evm_versions(:vyper),
+      is_rust_verifier_microservice_enabled: RustVerifierInterface.enabled?(),
+      license_types: Enum.into(SmartContract.license_types_enum(), %{})
+    }
 
     config =
       base_config
@@ -421,8 +420,8 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
 
     with {:not_found, true} <- {:not_found, FluentVerifierInterface.enabled?()},
          :validated <- validate_address(conn, params),
-         # Add specific validation for Fluent requests
-         :source_validated <- validate_fluent_source(params) do
+         # Validate Fluent payload against the current HTTP schema
+         :fluent_request_validated <- validate_fluent_request(params) do
       # All checks passed, queue the unified job
       log_sc_verification_started(address_hash_string)
       Que.add(FluentPublisherWorker, {"fluent", params})
@@ -437,18 +436,84 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
   # def verification_via_fluent_github_repository(conn, params) ...
   # def verification_via_fluent_archive(conn, params) ...
 
-  # New validation helper specific to Fluent verification requests.
-  defp validate_fluent_source(params) do
-    has_git_source = Map.has_key?(params, "git_source")
-    has_archive_source = Map.has_key?(params, "archive_source")
+  # Validation helpers specific to Fluent verification requests.
+  defp validate_fluent_request(params) do
+    with :source_validated <- validate_fluent_source(params),
+         :compile_settings_validated <- validate_fluent_compile_settings(params["compile_settings"]) do
+      :fluent_request_validated
+    end
+  end
 
-    case {has_git_source, has_archive_source} do
-      {true, false} -> :source_validated
-      {false, true} -> :source_validated
+  defp validate_fluent_source(params) do
+    git_source = Map.get(params, "git_source")
+    archive_source = Map.get(params, "archive_source")
+
+    case {is_map(git_source), is_map(archive_source)} do
+      {true, false} -> validate_fluent_git_source(git_source)
+      {false, true} -> validate_fluent_archive_source(archive_source)
       {true, true} -> {:error, "Request must contain either 'git_source' or 'archive_source', but not both."}
       {false, false} -> {:error, "Request must contain either 'git_source' or 'archive_source'."}
     end
   end
+
+  defp validate_fluent_git_source(git_source) do
+    repository_url = git_source["repository_url"]
+    commit_ref = git_source["commit_ref"] || git_source["commit_reference"] || git_source["commit"]
+
+    cond do
+      !is_binary(repository_url) or repository_url == "" ->
+        {:error, "git_source.repository_url is required"}
+
+      !is_binary(commit_ref) or commit_ref == "" ->
+        {:error, "git_source.commit_ref is required"}
+
+      true ->
+        :source_validated
+    end
+  end
+
+  defp validate_fluent_archive_source(archive_source) do
+    content = archive_source["content"]
+
+    if is_binary(content) and content != "" do
+      :source_validated
+    else
+      {:error, "archive_source.content is required"}
+    end
+  end
+
+  defp validate_fluent_compile_settings(settings) when is_map(settings) do
+    sdk_version = settings["sdk_version"]
+
+    cond do
+      !is_binary(sdk_version) or sdk_version == "" ->
+        {:error, "compile_settings.sdk_version is required"}
+
+      Map.has_key?(settings, "features") and !is_list(settings["features"]) ->
+        {:error, "compile_settings.features must be an array of strings"}
+
+      Map.has_key?(settings, "rust_flags") and !is_list(settings["rust_flags"]) ->
+        {:error, "compile_settings.rust_flags must be an array of strings"}
+
+      Map.has_key?(settings, "no_default_features") and !is_boolean(settings["no_default_features"]) ->
+        {:error, "compile_settings.no_default_features must be a boolean"}
+
+      Map.has_key?(settings, "rust_toolchain") and
+        !is_binary(settings["rust_toolchain"]) and
+          !is_nil(settings["rust_toolchain"]) ->
+        {:error, "compile_settings.rust_toolchain must be a string"}
+
+      Map.has_key?(settings, "manifest_path") and
+        !is_binary(settings["manifest_path"]) and
+          !is_nil(settings["manifest_path"]) ->
+        {:error, "compile_settings.manifest_path must be a string"}
+
+      true ->
+        :compile_settings_validated
+    end
+  end
+
+  defp validate_fluent_compile_settings(_), do: {:error, "compile_settings must be an object"}
 
   defp parse_interfaces(interfaces) do
     cond do
