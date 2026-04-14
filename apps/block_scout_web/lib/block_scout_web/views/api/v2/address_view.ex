@@ -13,6 +13,14 @@ defmodule BlockScoutWeb.API.V2.AddressView do
   alias Explorer.Chain.Token.Instance
 
   @api_true [api?: true]
+  @bridge_sent_message_topic_hash
+    "0x" <>
+      Base.encode16(
+        ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,bytes32,bytes)"),
+        case: :lower
+      )
+  @bridge_received_message_topic_hash
+    "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessage(bytes32,bool,bytes)"), case: :lower)
 
   def render("message.json", assigns) do
     ApiView.render("message.json", assigns)
@@ -79,6 +87,13 @@ defmodule BlockScoutWeb.API.V2.AddressView do
   def render("runtime_upgrade_logs.json", %{logs: logs, next_page_params: next_page_params}) do
     %{
       "items" => Enum.map(logs, &prepare_runtime_upgrade_log/1),
+      "next_page_params" => next_page_params
+    }
+  end
+
+  def render("bridge_operation_logs.json", %{logs: logs, next_page_params: next_page_params}) do
+    %{
+      "items" => Enum.map(logs, &prepare_bridge_operation_log/1),
       "next_page_params" => next_page_params
     }
   end
@@ -200,6 +215,64 @@ defmodule BlockScoutWeb.API.V2.AddressView do
     }
   end
 
+  defp prepare_bridge_operation_log(log) do
+    operation = bridge_operation(log.first_topic)
+
+    base = %{
+      "transaction_hash" => log.transaction_hash,
+      "block_number" => log.block_number,
+      "log_index" => log.index,
+      "block_timestamp" => log.block && log.block.timestamp,
+      "operation" => operation
+    }
+
+    case operation do
+      "deposit" ->
+        sent_message = decode_bridge_sent_message(log.data)
+
+        Map.merge(base, %{
+          "sender_address_hash" => decode_topic_address(log.second_topic),
+          "target_address_hash" => decode_topic_address(log.third_topic),
+          "value" => sent_message.value,
+          "chain_id" => sent_message.chain_id,
+          "source_block_number" => sent_message.source_block_number,
+          "nonce" => sent_message.nonce,
+          "message_hash" => sent_message.message_hash,
+          "successful_call" => nil
+        })
+
+      "withdraw" ->
+        received_message = decode_bridge_received_message(log.data)
+
+        Map.merge(base, %{
+          "sender_address_hash" => nil,
+          "target_address_hash" => nil,
+          "value" => nil,
+          "chain_id" => nil,
+          "source_block_number" => nil,
+          "nonce" => nil,
+          "message_hash" => received_message.message_hash,
+          "successful_call" => received_message.successful_call
+        })
+
+      _ ->
+        Map.merge(base, %{
+          "sender_address_hash" => nil,
+          "target_address_hash" => nil,
+          "value" => nil,
+          "chain_id" => nil,
+          "source_block_number" => nil,
+          "nonce" => nil,
+          "message_hash" => nil,
+          "successful_call" => nil
+        })
+    end
+  end
+
+  defp bridge_operation(@bridge_sent_message_topic_hash), do: "deposit"
+  defp bridge_operation(@bridge_received_message_topic_hash), do: "withdraw"
+  defp bridge_operation(_), do: nil
+
   defp decode_topic_address(nil), do: nil
 
   defp decode_topic_address(topic) do
@@ -283,6 +356,44 @@ defmodule BlockScoutWeb.API.V2.AddressView do
     bytes
     |> binary_part(offset, 32)
     |> :binary.decode_unsigned()
+  end
+
+  defp decode_bridge_sent_message(%Chain.Data{bytes: bytes}) when is_binary(bytes) do
+    with true <- byte_size(bytes) >= 160 do
+      %{
+        value: decode_word(bytes, 0),
+        chain_id: decode_word(bytes, 32),
+        source_block_number: decode_word(bytes, 64),
+        nonce: decode_word(bytes, 96),
+        message_hash: decode_word_as_hash(bytes, 128)
+      }
+    else
+      _ -> %{value: nil, chain_id: nil, source_block_number: nil, nonce: nil, message_hash: nil}
+    end
+  end
+
+  defp decode_bridge_sent_message(_), do: %{value: nil, chain_id: nil, source_block_number: nil, nonce: nil, message_hash: nil}
+
+  defp decode_bridge_received_message(%Chain.Data{bytes: bytes}) when is_binary(bytes) do
+    with true <- byte_size(bytes) >= 64 do
+      %{
+        message_hash: decode_word_as_hash(bytes, 0),
+        successful_call: decode_word(bytes, 32) == 1
+      }
+    else
+      _ -> %{message_hash: nil, successful_call: nil}
+    end
+  end
+
+  defp decode_bridge_received_message(_), do: %{message_hash: nil, successful_call: nil}
+
+  defp decode_word_as_hash(bytes, offset) do
+    with true <- is_integer(offset) and offset >= 0,
+         true <- offset + 32 <= byte_size(bytes) do
+      "0x" <> Base.encode16(binary_part(bytes, offset, 32), case: :lower)
+    else
+      _ -> nil
+    end
   end
 
   def get_watchlist_id(conn) do

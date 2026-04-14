@@ -59,6 +59,12 @@ defmodule BlockScoutWeb.API.V2.AddressController do
                                     _ -> nil
                                   end)
 
+  @bridge_operations_address "0x9CAcf613fC29015893728563f423fD26dCdB8Ddc"
+  @bridge_operations_address_hash (case Hash.Address.cast(@bridge_operations_address) do
+                                     {:ok, address_hash} -> address_hash
+                                     _ -> nil
+                                   end)
+
   alias Indexer.Fetcher.OnDemand.CoinBalance, as: CoinBalanceOnDemand
   alias Indexer.Fetcher.OnDemand.ContractCode, as: ContractCodeOnDemand
   alias Indexer.Fetcher.OnDemand.TokenBalance, as: TokenBalanceOnDemand
@@ -865,6 +871,88 @@ defmodule BlockScoutWeb.API.V2.AddressController do
       |> put_status(200)
       |> put_view(AddressView)
       |> render(:runtime_upgrade_logs, %{logs: logs, next_page_params: next_page_params})
+    end
+  end
+
+  operation :bridge_operations,
+    summary: "List bridge deposit/withdraw logs",
+    description:
+      "Returns paginated bridge operation logs (`deposit`/`withdraw`) for the fixed Fluent bridge contract address.",
+    parameters:
+      base_params() ++
+        define_paging_params(["block_number", "index", "items_count"]) ++
+        [
+          %OpenApiSpex.Parameter{
+            name: :operation,
+            in: :query,
+            schema: %Schema{type: :string, enum: ["deposit", "withdraw"]},
+            required: false,
+            description: "Optional operation filter. If omitted, returns both deposit and withdraw logs."
+          }
+        ],
+    responses: [
+      ok:
+        {"Bridge operation logs.", "application/json",
+         paginated_response(
+           items: %Schema{
+             type: :object,
+             properties: %{
+               transaction_hash: Schemas.General.HashString,
+               block_number: %Schema{type: :integer, nullable: true},
+               log_index: %Schema{type: :integer, nullable: true},
+               block_timestamp: Schemas.General.DateTime,
+               operation: %Schema{type: :string, enum: ["deposit", "withdraw"]},
+               sender_address_hash: Schemas.General.AddressHashNullable,
+               target_address_hash: Schemas.General.AddressHashNullable,
+               value: %Schema{type: :integer, nullable: true},
+               chain_id: %Schema{type: :integer, nullable: true},
+               source_block_number: %Schema{type: :integer, nullable: true},
+               nonce: %Schema{type: :integer, nullable: true},
+               message_hash: %Schema{type: :string, nullable: true},
+               successful_call: %Schema{type: :boolean, nullable: true}
+             },
+             nullable: false,
+             additionalProperties: false
+           },
+           next_page_params_example: %{"block_number" => 22_546_398, "index" => 268, "items_count" => 50}
+         )},
+      unprocessable_entity: JsonErrorResponse.response(),
+      forbidden: ForbiddenResponse.response()
+    ]
+
+  @doc """
+  Handles GET requests to `/api/v2/bridge-operations` endpoint.
+
+  Returns paginated bridge operation logs (`deposit`/`withdraw`) for the fixed Fluent bridge contract.
+  """
+  @spec bridge_operations(Plug.Conn.t(), map()) :: {:format, :error} | Plug.Conn.t()
+  def bridge_operations(conn, params) do
+    with {:ok, operation} <- validate_bridge_operation(params["operation"] || params[:operation]) do
+      {logs, next_page_params} =
+        case @bridge_operations_address_hash do
+          nil ->
+            {[], nil}
+
+          address_hash ->
+            options =
+              params
+              |> paging_options()
+              |> Keyword.merge(@api_true)
+
+            results_plus_one = Chain.bridge_operations(address_hash, operation, options)
+            {logs, next_page} = split_list_by_page(results_plus_one)
+
+            next_page_params =
+              next_page
+              |> next_page_params(logs, delete_parameters_from_next_page_params(params))
+
+            {logs, next_page_params}
+        end
+
+      conn
+      |> put_status(200)
+      |> put_view(AddressView)
+      |> render(:bridge_operation_logs, %{logs: logs, next_page_params: next_page_params})
     end
   end
 
@@ -1729,4 +1817,24 @@ defmodule BlockScoutWeb.API.V2.AddressController do
         end
     end
   end
+
+  @spec validate_bridge_operation(nil | String.t() | atom()) :: {:ok, :all | :deposit | :withdraw} | {:format, :error}
+  defp validate_bridge_operation(operation)
+
+  defp validate_bridge_operation(nil), do: {:ok, :all}
+  defp validate_bridge_operation(""), do: {:ok, :all}
+  defp validate_bridge_operation(:all), do: {:ok, :all}
+  defp validate_bridge_operation(:deposit), do: {:ok, :deposit}
+  defp validate_bridge_operation(:withdraw), do: {:ok, :withdraw}
+
+  defp validate_bridge_operation(operation) when is_binary(operation) do
+    case String.downcase(String.trim(operation)) do
+      "" -> {:ok, :all}
+      "deposit" -> {:ok, :deposit}
+      "withdraw" -> {:ok, :withdraw}
+      _ -> {:format, :error}
+    end
+  end
+
+  defp validate_bridge_operation(_), do: {:format, :error}
 end
