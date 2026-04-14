@@ -85,6 +85,19 @@ defmodule Explorer.Chain do
   @default_paging_options %PagingOptions{page_size: @default_page_size}
 
   @runtime_upgraded_topic_hash "0x2b9d873d8fe3cc1332bb875ae358b40fd305d1776ebe63cc80bac10fd3cf057b"
+  @bridge_sent_message_topic_hash
+    "0x" <>
+      Base.encode16(
+        ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,bytes32,bytes)"),
+        case: :lower
+      )
+  @bridge_received_message_topic_hash
+    "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessage(bytes32,bool,bytes)"), case: :lower)
+  @bridge_operation_topics %{
+    all: [@bridge_sent_message_topic_hash, @bridge_received_message_topic_hash],
+    deposit: [@bridge_sent_message_topic_hash],
+    withdraw: [@bridge_received_message_topic_hash]
+  }
 
   @token_transfers_per_transaction_preview 10
 
@@ -276,6 +289,41 @@ defmodule Explorer.Chain do
           where: log.address_hash == ^address_hash,
           where: log.first_topic == ^@runtime_upgraded_topic_hash,
           where: log.third_topic == ^genesis_hash,
+          limit: ^paging_options.page_size,
+          select: log,
+          inner_join: block in Block,
+          on: block.hash == log.block_hash,
+          where: block.consensus == true,
+          preload: [:block]
+        )
+        |> page_logs(paging_options)
+        |> BlockReaderGeneral.where_block_number_in_period(from_block, to_block)
+        |> select_repo(options).all()
+        |> Enum.take(paging_options.page_size)
+    end
+  end
+
+  @doc """
+  Returns paginated bridge operation logs (`deposit`/`withdraw`) for a specific bridge address.
+  """
+  @spec bridge_operations(Hash.Address.t(), :all | :deposit | :withdraw, [paging_options | api?]) :: [Log.t()]
+  def bridge_operations(address_hash, operation \\ :all, options \\ [])
+      when operation in [:all, :deposit, :withdraw] and is_list(options) do
+    paging_options = Keyword.get(options, :paging_options) || @default_paging_options
+
+    case paging_options do
+      %PagingOptions{key: {0, 0}} ->
+        []
+
+      _ ->
+        from_block = from_block(options)
+        to_block = to_block(options)
+        topics = Map.fetch!(@bridge_operation_topics, operation)
+
+        from(log in Log,
+          order_by: [desc: log.block_number, desc: log.index],
+          where: log.address_hash == ^address_hash,
+          where: log.first_topic in ^topics,
           limit: ^paging_options.page_size,
           select: log,
           inner_join: block in Block,
