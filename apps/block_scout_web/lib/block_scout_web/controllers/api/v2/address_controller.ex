@@ -897,10 +897,10 @@ defmodule BlockScoutWeb.API.V2.AddressController do
            items: %Schema{
              type: :object,
              properties: %{
-               transaction_hash: Schemas.General.HashString,
+               transaction_hash: Schemas.General.FullHash,
                block_number: %Schema{type: :integer, nullable: true},
                log_index: %Schema{type: :integer, nullable: true},
-               block_timestamp: Schemas.General.DateTime,
+               block_timestamp: Schemas.General.TimestampNullable,
                operation: %Schema{type: :string, enum: ["deposit", "withdraw"]},
                sender_address_hash: Schemas.General.AddressHashNullable,
                target_address_hash: Schemas.General.AddressHashNullable,
@@ -908,7 +908,7 @@ defmodule BlockScoutWeb.API.V2.AddressController do
                chain_id: %Schema{type: :integer, nullable: true},
                source_block_number: %Schema{type: :integer, nullable: true},
                nonce: %Schema{type: :integer, nullable: true},
-               message_hash: %Schema{type: :string, nullable: true},
+               message_hash: Schemas.General.FullHashNullable,
                successful_call: %Schema{type: :boolean, nullable: true}
              },
              nullable: false,
