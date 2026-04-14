@@ -740,6 +740,36 @@ defmodule BlockScoutWeb.API.V2.AddressController do
       forbidden: ForbiddenResponse.response()
     ]
 
+  operation :runtime_upgrades,
+    summary: "List runtime-upgrade aggregates grouped by genesis hash",
+    description:
+      "Returns runtime-upgrade aggregates grouped by genesis hash for events emitted by the runtime-upgrade system contract.",
+    parameters: base_params(),
+    responses: [
+      ok:
+        {"Runtime-upgrade aggregate list.", "application/json",
+         %Schema{
+           type: :object,
+           properties: %{
+             items: %Schema{
+               type: :array,
+               items: %Schema{
+                 type: :object,
+                 properties: %{
+                   genesis_hash: Schemas.General.HashString,
+                   genesis_version: %Schema{type: :integer, nullable: true},
+                   upgrades_count: %Schema{type: :integer, nullable: false}
+                 },
+                 nullable: false,
+                 additionalProperties: false
+               }
+             }
+           },
+           nullable: false,
+           additionalProperties: false
+         }}
+    ]
+
   @doc """
   Handles GET requests to `/api/v2/runtime-upgrades` endpoint.
 
@@ -760,6 +790,46 @@ defmodule BlockScoutWeb.API.V2.AddressController do
     |> put_view(AddressView)
     |> render(:runtime_upgrades, %{runtime_upgrades: runtime_upgrades})
   end
+
+  operation :runtime_upgrades_by_genesis_hash,
+    summary: "List runtime-upgrade events by genesis hash",
+    description:
+      "Returns paginated runtime-upgrade events for the given genesis hash from the runtime-upgrade system contract.",
+    parameters:
+      [
+        %OpenApiSpex.Parameter{
+          name: :genesis_hash,
+          in: :path,
+          schema: Schemas.General.HashString,
+          required: true,
+          description: "Genesis hash in the path."
+        }
+      ] ++
+        base_params() ++ define_paging_params(["block_number", "index", "items_count"]),
+    responses: [
+      ok:
+        {"Runtime-upgrade events for the given genesis hash.", "application/json",
+         paginated_response(
+           items: %Schema{
+             type: :object,
+             properties: %{
+               transaction_hash: Schemas.General.HashString,
+               block_number: %Schema{type: :integer, nullable: true},
+               log_index: %Schema{type: :integer, nullable: true},
+               block_timestamp: Schemas.General.DateTime,
+               target_address_hash: Schemas.General.AddressHash,
+               genesis_hash: Schemas.General.HashString,
+               genesis_version: %Schema{type: :integer, nullable: true},
+               code_hash: Schemas.General.HashString
+             },
+             nullable: false,
+             additionalProperties: false
+           },
+           next_page_params_example: %{"block_number" => 22_546_398, "index" => 268, "items_count" => 50}
+         )},
+      unprocessable_entity: JsonErrorResponse.response(),
+      forbidden: ForbiddenResponse.response()
+    ]
 
   @doc """
   Handles GET requests to `/api/v2/runtime-upgrades/:genesis_hash` endpoint.
