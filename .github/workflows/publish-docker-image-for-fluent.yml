@@ -54,7 +54,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BLOCKSCOUT_VERSION=v10.2.5.+commit.${{ env.SHORT_SHA }}
-            RELEASE_VERSION=10.2.5
+            BLOCKSCOUT_VERSION=v10.2.4.+commit.${{ env.SHORT_SHA }}
+            RELEASE_VERSION=10.2.4
           cache-from: type=gha
           cache-to: type=gha,mode=max
