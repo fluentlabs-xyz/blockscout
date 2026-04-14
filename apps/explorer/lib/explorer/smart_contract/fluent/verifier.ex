@@ -49,7 +49,7 @@ defmodule Explorer.SmartContract.Fluent.Verifier do
         "contract_address" => to_string(address_hash),
         "chain_id" => get_chain_id(),
         "rpc_endpoint" => CommonHelper.get_available_url(),
-        "compile_settings" => transform_compile_settings(params["compile_settings"])
+        "compile_settings" => transform_compile_settings(params)
       }
       |> Map.merge(prepare_source_payload(params))
 
@@ -72,33 +72,62 @@ defmodule Explorer.SmartContract.Fluent.Verifier do
   end
 
   # Transforms user-facing git source params to the microservice format.
+  # Supports both new (`commit_ref`) and legacy (`commit_reference`) field names.
   defp transform_git_source(git_source) do
     %{
       "repository_url" => git_source["repository_url"],
-      # User sends `commit_reference`, microservice expects `commit_ref`.
-      "commit_ref" => git_source["commit_reference"],
-      # User might send `root` or `path_to_...`, microservice expects `project_path`.
-      "project_path" => git_source["root"] || git_source["path_to_cargo_toml_in_repository"] || "."
+      "commit_ref" => git_source["commit_ref"] || git_source["commit_reference"] || git_source["commit"]
     }
   end
 
   # Transforms user-facing archive source params to the microservice format.
   defp transform_archive_source(archive_source) do
     %{
-      "content" => archive_source["content"],
-      # User might send `root` or `path_to_...`, microservice expects `project_path`.
-      "project_path" => archive_source["root"] || archive_source["path_to_cargo_toml_in_archive"] || "."
+      "content" => archive_source["content"]
     }
   end
 
   # Transforms user-facing compile settings to the microservice format.
-  defp transform_compile_settings(settings) do
+  # New HTTP schema supports optional `rust_flags`, `rust_toolchain`, `manifest_path`.
+  # For backward compatibility, `manifest_path` can still be derived from legacy source fields.
+  defp transform_compile_settings(params) do
+    settings = params["compile_settings"] || %{}
+
     %{
       "sdk_version" => settings["sdk_version"],
-      "features" => settings["features"] || [],
-      "no_default_features" => settings["no_default_features"] || false
+      "features" => normalize_list(settings["features"]),
+      "no_default_features" => settings["no_default_features"] || false,
+      "rust_flags" => normalize_list(settings["rust_flags"])
     }
+    |> put_if_present("rust_toolchain", settings["rust_toolchain"])
+    |> put_if_present("manifest_path", settings["manifest_path"] || legacy_manifest_path(params))
   end
+
+  defp legacy_manifest_path(params) do
+    git_source = params["git_source"] || %{}
+    archive_source = params["archive_source"] || %{}
+
+    git_source["path_to_cargo_toml_in_repository"] ||
+      archive_source["path_to_cargo_toml_in_archive"] ||
+      root_to_manifest_path(git_source["root"]) ||
+      root_to_manifest_path(archive_source["root"])
+  end
+
+  defp root_to_manifest_path(nil), do: nil
+  defp root_to_manifest_path(""), do: nil
+
+  defp root_to_manifest_path(root) when is_binary(root) do
+    Path.join(root, "Cargo.toml")
+  end
+
+  defp root_to_manifest_path(_), do: nil
+
+  defp normalize_list(value) when is_list(value), do: value
+  defp normalize_list(_), do: []
+
+  defp put_if_present(map, _key, nil), do: map
+  defp put_if_present(map, _key, ""), do: map
+  defp put_if_present(map, key, value), do: Map.put(map, key, value)
 
   defp get_chain_id do
     Application.get_env(:block_scout_web, :chain_id) ||
