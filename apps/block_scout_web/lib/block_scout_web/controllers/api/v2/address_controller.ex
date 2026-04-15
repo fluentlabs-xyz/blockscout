@@ -875,9 +875,9 @@ defmodule BlockScoutWeb.API.V2.AddressController do
   end
 
   operation :bridge_operations,
-    summary: "List bridge deposit/withdraw logs",
+    summary: "List decoded bridge events",
     description:
-      "Returns paginated bridge operation logs (`deposit`/`withdraw`). Uses the default Fluent bridge contract address when `bridge_address` is not provided.",
+      "Returns paginated decoded bridge events for Fluent bridge operations. Uses the default Fluent bridge contract address when `bridge_address` is not provided.",
     parameters:
       base_params() ++
         define_paging_params(["block_number", "index", "items_count"]) ++
@@ -887,7 +887,8 @@ defmodule BlockScoutWeb.API.V2.AddressController do
             in: :query,
             schema: %Schema{type: :string, enum: ["deposit", "withdraw"]},
             required: false,
-            description: "Optional operation filter. If omitted, returns both deposit and withdraw logs."
+            description:
+              "Optional operation filter. `deposit` returns `SentMessage`; `withdraw` returns `ReceivedMessage`, `RollbackMessage`, and `ReceivedMessageRollback`."
           },
           %OpenApiSpex.Parameter{
             name: :bridge_address,
@@ -910,7 +911,12 @@ defmodule BlockScoutWeb.API.V2.AddressController do
                log_index: %Schema{type: :integer, nullable: true},
                block_timestamp: Schemas.General.TimestampNullable,
                bridge_address: Schemas.General.AddressHashNullable,
-               operation: %Schema{type: :string, enum: ["deposit", "withdraw"]},
+               event: %Schema{
+                 type: :string,
+                 enum: ["sent_message", "received_message", "rollback_message", "received_message_rollback"],
+                 nullable: true
+               },
+               operation: %Schema{type: :string, enum: ["deposit", "withdraw"], nullable: true},
                sender_address_hash: Schemas.General.AddressHashNullable,
                target_address_hash: Schemas.General.AddressHashNullable,
                value: %Schema{type: :integer, nullable: true},
@@ -918,7 +924,10 @@ defmodule BlockScoutWeb.API.V2.AddressController do
                source_block_number: %Schema{type: :integer, nullable: true},
                nonce: %Schema{type: :integer, nullable: true},
                message_hash: Schemas.General.FullHashNullable,
-               successful_call: %Schema{type: :boolean, nullable: true}
+               successful_call: %Schema{type: :boolean, nullable: true},
+               rollback_block_number: %Schema{type: :integer, nullable: true},
+               message_data: Schemas.General.HexStringNullable,
+               return_data: Schemas.General.HexStringNullable
              },
              nullable: false,
              additionalProperties: false

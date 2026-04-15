@@ -21,6 +21,10 @@ defmodule BlockScoutWeb.API.V2.AddressView do
       )
   @bridge_received_message_topic_hash
     "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessage(bytes32,bool,bytes)"), case: :lower)
+  @bridge_rollback_message_topic_hash
+    "0x" <> Base.encode16(ExKeccak.hash_256("RollbackMessage(bytes32,uint256)"), case: :lower)
+  @bridge_received_message_rollback_topic_hash
+    "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessageRollback(bytes32,bool,bytes)"), case: :lower)
 
   def render("message.json", assigns) do
     ApiView.render("message.json", assigns)
@@ -216,7 +220,8 @@ defmodule BlockScoutWeb.API.V2.AddressView do
   end
 
   defp prepare_bridge_operation_log(log) do
-    operation = bridge_operation(log.first_topic)
+    event = bridge_event(log.first_topic)
+    operation = bridge_operation(event)
 
     base = %{
       "transaction_hash" => log.transaction_hash,
@@ -224,11 +229,23 @@ defmodule BlockScoutWeb.API.V2.AddressView do
       "log_index" => log.index,
       "block_timestamp" => log.block && log.block.timestamp,
       "bridge_address" => log.address_hash && to_string(log.address_hash),
-      "operation" => operation
+      "event" => event,
+      "operation" => operation,
+      "sender_address_hash" => nil,
+      "target_address_hash" => nil,
+      "value" => nil,
+      "chain_id" => nil,
+      "source_block_number" => nil,
+      "nonce" => nil,
+      "message_hash" => nil,
+      "successful_call" => nil,
+      "rollback_block_number" => nil,
+      "message_data" => nil,
+      "return_data" => nil
     }
 
-    case operation do
-      "deposit" ->
+    case event do
+      "sent_message" ->
         sent_message = decode_bridge_sent_message(log.data)
 
         Map.merge(base, %{
@@ -239,39 +256,50 @@ defmodule BlockScoutWeb.API.V2.AddressView do
           "source_block_number" => sent_message.source_block_number,
           "nonce" => sent_message.nonce,
           "message_hash" => sent_message.message_hash,
-          "successful_call" => nil
+          "message_data" => sent_message.message_data
         })
 
-      "withdraw" ->
+      "received_message" ->
         received_message = decode_bridge_received_message(log.data)
 
         Map.merge(base, %{
-          "sender_address_hash" => nil,
-          "target_address_hash" => nil,
-          "value" => nil,
-          "chain_id" => nil,
-          "source_block_number" => nil,
-          "nonce" => nil,
           "message_hash" => received_message.message_hash,
-          "successful_call" => received_message.successful_call
+          "successful_call" => received_message.successful_call,
+          "return_data" => received_message.return_data
+        })
+
+      "rollback_message" ->
+        rollback_message = decode_bridge_rollback_message(log.data)
+
+        Map.merge(base, %{
+          "message_hash" => rollback_message.message_hash,
+          "rollback_block_number" => rollback_message.rollback_block_number
+        })
+
+      "received_message_rollback" ->
+        received_message_rollback = decode_bridge_received_message(log.data)
+
+        Map.merge(base, %{
+          "message_hash" => received_message_rollback.message_hash,
+          "successful_call" => received_message_rollback.successful_call,
+          "return_data" => received_message_rollback.return_data
         })
 
       _ ->
-        Map.merge(base, %{
-          "sender_address_hash" => nil,
-          "target_address_hash" => nil,
-          "value" => nil,
-          "chain_id" => nil,
-          "source_block_number" => nil,
-          "nonce" => nil,
-          "message_hash" => nil,
-          "successful_call" => nil
-        })
+        base
     end
   end
 
-  defp bridge_operation(@bridge_sent_message_topic_hash), do: "deposit"
-  defp bridge_operation(@bridge_received_message_topic_hash), do: "withdraw"
+  defp bridge_event(@bridge_sent_message_topic_hash), do: "sent_message"
+  defp bridge_event(@bridge_received_message_topic_hash), do: "received_message"
+  defp bridge_event(@bridge_rollback_message_topic_hash), do: "rollback_message"
+  defp bridge_event(@bridge_received_message_rollback_topic_hash), do: "received_message_rollback"
+  defp bridge_event(_), do: nil
+
+  defp bridge_operation("sent_message"), do: "deposit"
+  defp bridge_operation("received_message"), do: "withdraw"
+  defp bridge_operation("rollback_message"), do: "withdraw"
+  defp bridge_operation("received_message_rollback"), do: "withdraw"
   defp bridge_operation(_), do: nil
 
   defp decode_topic_address(nil), do: nil
@@ -360,33 +388,75 @@ defmodule BlockScoutWeb.API.V2.AddressView do
   end
 
   defp decode_bridge_sent_message(%Chain.Data{bytes: bytes}) when is_binary(bytes) do
-    with true <- byte_size(bytes) >= 160 do
+    with true <- byte_size(bytes) >= 192 do
       %{
         value: decode_word(bytes, 0),
         chain_id: decode_word(bytes, 32),
         source_block_number: decode_word(bytes, 64),
         nonce: decode_word(bytes, 96),
-        message_hash: decode_word_as_hash(bytes, 128)
+        message_hash: decode_word_as_hash(bytes, 128),
+        message_data: decode_dynamic_bytes_as_hex(bytes, 160)
       }
     else
-      _ -> %{value: nil, chain_id: nil, source_block_number: nil, nonce: nil, message_hash: nil}
+      _ ->
+        %{
+          value: nil,
+          chain_id: nil,
+          source_block_number: nil,
+          nonce: nil,
+          message_hash: nil,
+          message_data: nil
+        }
     end
   end
 
-  defp decode_bridge_sent_message(_), do: %{value: nil, chain_id: nil, source_block_number: nil, nonce: nil, message_hash: nil}
+  defp decode_bridge_sent_message(_),
+    do: %{value: nil, chain_id: nil, source_block_number: nil, nonce: nil, message_hash: nil, message_data: nil}
 
   defp decode_bridge_received_message(%Chain.Data{bytes: bytes}) when is_binary(bytes) do
+    with true <- byte_size(bytes) >= 96 do
+      %{
+        message_hash: decode_word_as_hash(bytes, 0),
+        successful_call: decode_word(bytes, 32) == 1,
+        return_data: decode_dynamic_bytes_as_hex(bytes, 64)
+      }
+    else
+      _ -> %{message_hash: nil, successful_call: nil, return_data: nil}
+    end
+  end
+
+  defp decode_bridge_received_message(_), do: %{message_hash: nil, successful_call: nil, return_data: nil}
+
+  defp decode_bridge_rollback_message(%Chain.Data{bytes: bytes}) when is_binary(bytes) do
     with true <- byte_size(bytes) >= 64 do
       %{
         message_hash: decode_word_as_hash(bytes, 0),
-        successful_call: decode_word(bytes, 32) == 1
+        rollback_block_number: decode_word(bytes, 32)
       }
     else
-      _ -> %{message_hash: nil, successful_call: nil}
+      _ -> %{message_hash: nil, rollback_block_number: nil}
     end
   end
 
-  defp decode_bridge_received_message(_), do: %{message_hash: nil, successful_call: nil}
+  defp decode_bridge_rollback_message(_), do: %{message_hash: nil, rollback_block_number: nil}
+
+  defp decode_dynamic_bytes_as_hex(bytes, head_offset) do
+    with true <- is_integer(head_offset) and head_offset >= 0,
+         true <- head_offset + 32 <= byte_size(bytes),
+         relative_offset <- decode_word(bytes, head_offset),
+         true <- is_integer(relative_offset) and relative_offset >= 0,
+         length_offset <- head_offset + relative_offset,
+         true <- length_offset + 32 <= byte_size(bytes),
+         data_length <- decode_word(bytes, length_offset),
+         true <- is_integer(data_length) and data_length >= 0,
+         data_offset <- length_offset + 32,
+         true <- data_offset + data_length <= byte_size(bytes),
+         data <- binary_part(bytes, data_offset, data_length) do
+      "0x" <> Base.encode16(data, case: :lower)
+    else
+      _ -> nil
+    end
+  end
 
   defp decode_word_as_hash(bytes, offset) do
     with true <- is_integer(offset) and offset >= 0,

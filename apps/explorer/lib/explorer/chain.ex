@@ -87,10 +87,23 @@ defmodule Explorer.Chain do
   @runtime_upgraded_topic_hash "0x2b9d873d8fe3cc1332bb875ae358b40fd305d1776ebe63cc80bac10fd3cf057b"
   @bridge_sent_message_topic_hash "0x7b397c6ce16a73396390bf270a2021417ca4d97f44e82cdce3f5eb750fd34134"
   @bridge_received_message_topic_hash "0xc5797c3a3c0e6c245576d05b8c3929881b44e1a21fdb4f1b118ede3c009683c5"
+  @bridge_rollback_message_topic_hash
+    "0x" <> Base.encode16(ExKeccak.hash_256("RollbackMessage(bytes32,uint256)"), case: :lower)
+  @bridge_received_message_rollback_topic_hash
+    "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessageRollback(bytes32,bool,bytes)"), case: :lower)
   @bridge_operation_topics %{
-    all: [@bridge_sent_message_topic_hash, @bridge_received_message_topic_hash],
+    all: [
+      @bridge_sent_message_topic_hash,
+      @bridge_received_message_topic_hash,
+      @bridge_rollback_message_topic_hash,
+      @bridge_received_message_rollback_topic_hash
+    ],
     deposit: [@bridge_sent_message_topic_hash],
-    withdraw: [@bridge_received_message_topic_hash]
+    withdraw: [
+      @bridge_received_message_topic_hash,
+      @bridge_rollback_message_topic_hash,
+      @bridge_received_message_rollback_topic_hash
+    ]
   }
 
   @token_transfers_per_transaction_preview 10
