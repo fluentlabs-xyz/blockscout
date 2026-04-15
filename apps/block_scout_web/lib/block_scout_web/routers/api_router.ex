@@ -240,6 +240,10 @@ defmodule BlockScoutWeb.Routers.ApiRouter do
       get("/runtime-upgrades", V2.FluentController, :runtime_upgrades)
       get("/runtime-upgrades/:genesis_hash", V2.FluentController, :runtime_upgrades_by_genesis_hash)
       get("/bridge-operations", V2.FluentController, :bridge_operations)
+      get("/deposits", V2.FluentController, :deposits)
+      get("/deposits/count", V2.FluentController, :deposits_count)
+      get("/withdrawals", V2.FluentController, :withdrawals)
+      get("/withdrawals/count", V2.FluentController, :withdrawals_count)
     end
 
     scope "/addresses" do

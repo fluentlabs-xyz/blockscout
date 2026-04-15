@@ -55,6 +55,7 @@ defmodule BlockScoutWeb.Chain do
   alias Explorer.Chain.Optimism.FrameSequence, as: OptimismFrameSequence
   alias Explorer.Chain.Optimism.InteropMessage, as: OptimismInteropMessage
   alias Explorer.Chain.Optimism.OutputRoot, as: OptimismOutputRoot
+  alias Explorer.Chain.Fluent.Bridge, as: FluentBridge
   alias Explorer.Chain.Scroll.Bridge, as: ScrollBridge
   alias Explorer.{Etherscan, PagingOptions}
   alias Explorer.Migrator.DeleteZeroValueInternalTransactions
@@ -1067,6 +1068,10 @@ defmodule BlockScoutWeb.Chain do
 
   defp paging_params(%ScrollBridge{index: id}) do
     %{"id" => id}
+  end
+
+  defp paging_params(%FluentBridge{nonce: nonce}) do
+    %{"id" => nonce}
   end
 
   defp paging_params(%Instance{token_id: token_id}) do
