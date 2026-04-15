@@ -877,7 +877,7 @@ defmodule BlockScoutWeb.API.V2.AddressController do
   operation :bridge_operations,
     summary: "List bridge deposit/withdraw logs",
     description:
-      "Returns paginated bridge operation logs (`deposit`/`withdraw`) for the fixed Fluent bridge contract address.",
+      "Returns paginated bridge operation logs (`deposit`/`withdraw`). Uses the default Fluent bridge contract address when `bridge_address` is not provided.",
     parameters:
       base_params() ++
         define_paging_params(["block_number", "index", "items_count"]) ++
@@ -888,6 +888,14 @@ defmodule BlockScoutWeb.API.V2.AddressController do
             schema: %Schema{type: :string, enum: ["deposit", "withdraw"]},
             required: false,
             description: "Optional operation filter. If omitted, returns both deposit and withdraw logs."
+          },
+          %OpenApiSpex.Parameter{
+            name: :bridge_address,
+            in: :query,
+            schema: Schemas.General.AddressHash,
+            required: false,
+            description:
+              "Optional bridge contract address override. If omitted, the default Fluent bridge address is used."
           }
         ],
     responses: [
@@ -901,6 +909,7 @@ defmodule BlockScoutWeb.API.V2.AddressController do
                block_number: %Schema{type: :integer, nullable: true},
                log_index: %Schema{type: :integer, nullable: true},
                block_timestamp: Schemas.General.TimestampNullable,
+               bridge_address: Schemas.General.AddressHashNullable,
                operation: %Schema{type: :string, enum: ["deposit", "withdraw"]},
                sender_address_hash: Schemas.General.AddressHashNullable,
                target_address_hash: Schemas.General.AddressHashNullable,
@@ -923,13 +932,18 @@ defmodule BlockScoutWeb.API.V2.AddressController do
   @doc """
   Handles GET requests to `/api/v2/bridge-operations` endpoint.
 
-  Returns paginated bridge operation logs (`deposit`/`withdraw`) for the fixed Fluent bridge contract.
+  Returns paginated bridge operation logs (`deposit`/`withdraw`) for the default Fluent bridge
+  contract, or for `bridge_address` query param if provided.
   """
-  @spec bridge_operations(Plug.Conn.t(), map()) :: {:format, :error} | Plug.Conn.t()
+  @spec bridge_operations(Plug.Conn.t(), map()) :: {:format, :error} | {:restricted_access, true} | Plug.Conn.t()
   def bridge_operations(conn, params) do
-    with {:ok, operation} <- validate_bridge_operation(params["operation"] || params[:operation]) do
+    with {:ok, operation} <- validate_bridge_operation(params["operation"] || params[:operation]),
+         {:ok, bridge_address_hash} <-
+           validate_optional_bridge_address(params["bridge_address"] || params[:bridge_address], params) do
+      address_hash = bridge_address_hash || @bridge_operations_address_hash
+
       {logs, next_page_params} =
-        case @bridge_operations_address_hash do
+        case address_hash do
           nil ->
             {[], nil}
 
@@ -1841,6 +1855,34 @@ defmodule BlockScoutWeb.API.V2.AddressController do
       topic
     end
   end
+
+  @spec validate_optional_bridge_address(nil | String.t() | Hash.Address.t(), any()) ::
+          {:format, :error}
+          | {:restricted_access, true}
+          | {:ok, nil | Hash.Address.t()}
+  defp validate_optional_bridge_address(address_hash, params)
+
+  defp validate_optional_bridge_address(nil, _params), do: {:ok, nil}
+
+  defp validate_optional_bridge_address(%Hash{byte_count: 20} = address_hash, _params), do: {:ok, address_hash}
+
+  defp validate_optional_bridge_address(address_hash, params) when is_binary(address_hash) do
+    address_hash =
+      address_hash
+      |> String.trim()
+      |> String.trim_leading("\"")
+      |> String.trim_trailing("\"")
+      |> String.trim_leading("'")
+      |> String.trim_trailing("'")
+
+    case address_hash do
+      "" -> {:ok, nil}
+      "null" -> {:ok, nil}
+      _ -> validate_optional_address_hash(address_hash, params)
+    end
+  end
+
+  defp validate_optional_bridge_address(_, _), do: {:format, :error}
 
   @spec validate_bridge_operation(nil | String.t() | atom()) :: {:ok, :all | :deposit | :withdraw} | {:format, :error}
   defp validate_bridge_operation(operation)

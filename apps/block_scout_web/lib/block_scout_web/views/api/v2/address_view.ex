@@ -223,6 +223,7 @@ defmodule BlockScoutWeb.API.V2.AddressView do
       "block_number" => log.block_number,
       "log_index" => log.index,
       "block_timestamp" => log.block && log.block.timestamp,
+      "bridge_address" => log.address_hash && to_string(log.address_hash),
       "operation" => operation
     }
 
