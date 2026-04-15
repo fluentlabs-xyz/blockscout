@@ -405,7 +405,7 @@ defmodule Explorer.Chain.Import.Runner.Transactions do
         )
       end
 
-    {:scroll, nil} ->
+    chain_identity when chain_identity in [{:scroll, nil}, {:fluent, nil}] ->
       defp default_on_conflict do
         from(
           transaction in Transaction,

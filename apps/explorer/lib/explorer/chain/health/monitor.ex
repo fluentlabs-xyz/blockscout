@@ -9,6 +9,7 @@ defmodule Explorer.Chain.Health.Monitor do
   alias EthereumJSONRPC.Utility.EndpointAvailabilityChecker
   alias Explorer.Chain.Arbitrum.Reader.Common, as: ArbitrumReaderCommon
   alias Explorer.Chain.Cache.Counters.LastFetchedCounter
+  alias Explorer.Chain.Fluent.Reader, as: FluentReader
   alias Explorer.Chain.Health.Helper, as: HealthHelper
   alias Explorer.Chain.Optimism.Reader, as: OptimismReader
   alias Explorer.Chain.PolygonZkevm.Reader, as: PolygonZkevmReader
@@ -85,6 +86,9 @@ defmodule Explorer.Chain.Health.Monitor do
 
         :scroll ->
           get_latest_batch_info_from_module(ScrollReader)
+
+        :fluent ->
+          get_latest_batch_info_from_module(FluentReader)
 
         _ ->
           nil

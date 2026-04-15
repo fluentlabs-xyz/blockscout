@@ -59,6 +59,11 @@ defmodule Explorer.Chain.Import.Stage.ChainTypeSpecific do
       Runner.Scroll.BridgeOperations,
       Runner.Scroll.L1FeeParams
     ],
+    fluent: [
+      Runner.Fluent.BatchBundles,
+      Runner.Fluent.Batches,
+      Runner.Fluent.BridgeOperations
+    ],
     zilliqa: [
       Runner.Zilliqa.AggregateQuorumCertificates,
       Runner.Zilliqa.NestedQuorumCertificates,

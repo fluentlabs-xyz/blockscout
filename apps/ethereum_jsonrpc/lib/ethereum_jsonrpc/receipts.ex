@@ -116,7 +116,7 @@ defmodule EthereumJSONRPC.Receipts do
         operator_fee_constant: nil,\
         da_footprint_gas_scalar: nil\
       """
-    :scroll -> """
+    chain_type when chain_type in [:scroll, :fluent] -> """
         l1_fee: 0\
       """
     :arbitrum -> """

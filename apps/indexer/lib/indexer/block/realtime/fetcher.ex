@@ -381,7 +381,7 @@ defmodule Indexer.Block.Realtime.Fetcher do
     chain_type = Application.get_env(:explorer, :chain_type)
     do_remove_assets_by_number(chain_type, reorg_block)
 
-    if fluent_bridge_enabled?() do
+    if fluent_bridge_enabled?() and chain_type != :fluent do
       Indexer.Fetcher.Fluent.BridgeL2.reorg_handle(reorg_block)
     end
   end
@@ -418,6 +418,13 @@ defmodule Indexer.Block.Realtime.Fetcher do
     # credo:disable-for-lines:2 Credo.Check.Design.AliasUsage
     Indexer.Fetcher.Scroll.BridgeL2.reorg_handle(reorg_block)
     Indexer.Fetcher.Scroll.L1FeeParam.handle_l2_reorg(reorg_block)
+  end
+
+  # Removes all rows from `fluent_bridge` table
+  # previously written starting from the reorg block number
+  defp do_remove_assets_by_number(:fluent, reorg_block) do
+    # credo:disable-for-next-line Credo.Check.Design.AliasUsage
+    Indexer.Fetcher.Fluent.BridgeL2.reorg_handle(reorg_block)
   end
 
   defp do_remove_assets_by_number(_, _), do: :ok

@@ -58,7 +58,7 @@ defmodule Explorer.Chain.Transaction.Schema do
                             2
                           )
 
-                        :scroll ->
+                        chain_type when chain_type in [:scroll, :fluent] ->
                           elem(
                             quote do
                               field(:l1_fee, Wei)
@@ -374,7 +374,7 @@ defmodule Explorer.Chain.Transaction do
                                 :optimism ->
                                   ~w(l1_fee l1_fee_scalar l1_gas_price l1_gas_used l1_transaction_origin l1_block_number operator_fee_scalar operator_fee_constant da_footprint_gas_scalar)a
 
-                                :scroll ->
+                                chain_type when chain_type in [:scroll, :fluent] ->
                                   ~w(l1_fee queue_index)a
 
                                 :suave ->

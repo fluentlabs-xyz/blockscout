@@ -32,7 +32,7 @@ defmodule EthereumJSONRPC.Receipt do
                            ]
                          )
 
-    :scroll ->
+    chain_type when chain_type in [:scroll, :fluent] ->
       @chain_type_fields quote(
                            do: [
                              l1_fee: non_neg_integer()
@@ -136,7 +136,7 @@ defmodule EthereumJSONRPC.Receipt do
           operator_fee_constant: nil,\
           da_footprint_gas_scalar: nil\
       """
-    :scroll -> """
+    chain_type when chain_type in [:scroll, :fluent] -> """
           l1_fee: 0\
       """
     :arbitrum -> """
@@ -191,7 +191,7 @@ defmodule EthereumJSONRPC.Receipt do
           operator_fee_constant: nil,\
           da_footprint_gas_scalar: nil\
       """
-    :scroll -> """
+    chain_type when chain_type in [:scroll, :fluent] -> """
           l1_fee: 0\
       """
     :arbitrum -> """
@@ -272,7 +272,7 @@ defmodule EthereumJSONRPC.Receipt do
         })
       end
 
-    :scroll ->
+    chain_type when chain_type in [:scroll, :fluent] ->
       defp chain_type_fields(params, elixir) do
         params
         |> Map.merge(%{

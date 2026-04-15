@@ -43,7 +43,7 @@ defmodule EthereumJSONRPC.Transaction do
                            ]
                          )
 
-    :scroll ->
+    chain_type when chain_type in [:scroll, :fluent] ->
       @chain_type_fields quote(
                            do: [
                              queue_index: non_neg_integer()
@@ -144,7 +144,7 @@ defmodule EthereumJSONRPC.Transaction do
        * `"l1TxOrigin"` - .
        * `"l1BlockNumber"` - .
       """
-    :scroll -> """
+    chain_type when chain_type in [:scroll, :fluent] -> """
        * `"queueIndex"` - An index of L1MessageTx (replaces Nonce) in Scroll rollup.
       """
     :suave -> """
@@ -560,7 +560,7 @@ defmodule EthereumJSONRPC.Transaction do
           {"blobVersionedHashes", :blob_versioned_hashes}
         ])
 
-      :scroll ->
+      chain_type when chain_type in [:scroll, :fluent] ->
         put_if_present(params, elixir, [
           {"queueIndex", :queue_index}
         ])

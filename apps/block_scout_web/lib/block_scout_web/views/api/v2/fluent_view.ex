@@ -1,8 +1,12 @@
 defmodule BlockScoutWeb.API.V2.FluentView do
   use BlockScoutWeb, :view
 
+  alias BlockScoutWeb.API.V2.TransactionView
+  alias Explorer.Chain.Fluent.Reader
   alias Explorer.Chain.Transaction
   alias Explorer.Chain.Fluent.Batch
+
+  @api_true [api?: true]
 
   @spec render(binary(), map()) :: map() | non_neg_integer()
   def render("fluent_bridge_items.json", %{items: items, next_page_params: next_page_params, type: type}) do
@@ -78,6 +82,32 @@ defmodule BlockScoutWeb.API.V2.FluentView do
 
   def render("fluent_batches_count.json", %{count: count}), do: count
 
+  @spec extend_transaction_json_response(map(), %Transaction{}) :: map()
+  def extend_transaction_json_response(out_json, %Transaction{block_number: nil}) do
+    out_json
+  end
+
+  def extend_transaction_json_response(out_json, %Transaction{} = transaction) do
+    l2_fee =
+      transaction
+      |> Transaction.l2_fee(:wei)
+      |> TransactionView.format_fee()
+
+    l2_block_status = l2_block_status(transaction.block_number)
+
+    params =
+      %{}
+      |> add_optional_transaction_field(transaction, :l1_fee)
+      |> add_optional_transaction_field(transaction, :queue_index)
+      |> Map.put("l2_fee", l2_fee)
+      |> Map.put("l2_block_status", l2_block_status)
+
+    out_json
+    |> Map.put("fluent", params)
+    # compatibility for clients still reading `scroll` fields
+    |> Map.put("scroll", params)
+  end
+
   @spec render_batch(Batch.t()) :: map()
   defp render_batch(batch) do
     {finalize_block_number, finalize_transaction_hash, finalize_timestamp} =
@@ -124,6 +154,22 @@ defmodule BlockScoutWeb.API.V2.FluentView do
       item.completion_kind == :rollback_message -> "rollback"
       is_nil(item.l1_transaction_hash) or is_nil(item.l2_transaction_hash) -> "pending"
       true -> "completed"
+    end
+  end
+
+  defp add_optional_transaction_field(out_json, transaction, field) do
+    case Map.get(transaction, field) do
+      nil -> out_json
+      value -> Map.put(out_json, Atom.to_string(field), value)
+    end
+  end
+
+  @spec l2_block_status(non_neg_integer()) :: binary()
+  defp l2_block_status(block_number) do
+    case Reader.batch_by_l2_block_number(block_number, @api_true) do
+      {_batch_number, nil} -> "Committed"
+      {_batch_number, _bundle_id} -> "Finalized"
+      nil -> "Confirmed by Sequencer"
     end
   end
 end

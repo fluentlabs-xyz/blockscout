@@ -44,6 +44,9 @@ defmodule Indexer.Fetcher.RollupL1ReorgMonitor do
             Indexer.Fetcher.Scroll.BridgeL1
           ]
 
+        :fluent ->
+          fluent_modules_for_reorg_monitor()
+
         :shibarium ->
           [
             Indexer.Fetcher.Shibarium.L1
@@ -53,7 +56,8 @@ defmodule Indexer.Fetcher.RollupL1ReorgMonitor do
           []
       end
 
-    base_modules ++ fluent_modules_for_reorg_monitor()
+    (base_modules ++ fluent_modules_for_reorg_monitor())
+    |> Enum.uniq()
   end
 
   defp fluent_modules_for_reorg_monitor do

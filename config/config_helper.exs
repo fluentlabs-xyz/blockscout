@@ -417,6 +417,7 @@ defmodule ConfigHelper do
     "polygon_zkevm" => :polygon_zkevm,
     "rsk" => :rsk,
     "scroll" => :scroll,
+    "fluent" => :fluent,
     "shibarium" => :shibarium,
     "stability" => :stability,
     "suave" => :suave,

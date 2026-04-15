@@ -975,6 +975,11 @@ defmodule BlockScoutWeb.API.V2.TransactionView do
     BlockScoutWeb.API.V2.ScrollView.extend_transaction_json_response(result, transaction)
   end
 
+  defp do_with_chain_type_fields(result, :fluent, transaction, true = _single_transaction?, _conn, _watchlist_names) do
+    # credo:disable-for-next-line Credo.Check.Design.AliasUsage
+    BlockScoutWeb.API.V2.FluentView.extend_transaction_json_response(result, transaction)
+  end
+
   defp do_with_chain_type_fields(result, :suave, transaction, true = single_transaction?, conn, watchlist_names) do
     # credo:disable-for-next-line Credo.Check.Design.AliasUsage
     BlockScoutWeb.API.V2.SuaveView.extend_transaction_json_response(

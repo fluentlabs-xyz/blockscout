@@ -213,6 +213,9 @@ defmodule BlockScoutWeb.Schemas.API.V2.Transaction.ChainTypeCustomizations do
       :scroll ->
         schema |> Helper.extend_schema(properties: %{scroll: @scroll_schema})
 
+      :fluent ->
+        schema |> Helper.extend_schema(properties: %{fluent: @scroll_schema, scroll: @scroll_schema})
+
       :suave ->
         schema
         |> Helper.extend_schema(
