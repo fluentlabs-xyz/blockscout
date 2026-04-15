@@ -1797,7 +1797,7 @@ defmodule BlockScoutWeb.API.V2.AddressController do
     end
   end
 
-  @spec validate_optional_topic(nil | String.t()) :: {:ok, nil | Hash.Full.t()} | {:format, :error}
+  @spec validate_optional_topic(nil | String.t() | Hash.Full.t()) :: {:ok, nil | Hash.Full.t()} | {:format, :error}
   defp validate_optional_topic(topic) do
     topic =
       if is_binary(topic) do
@@ -1821,6 +1821,9 @@ defmodule BlockScoutWeb.API.V2.AddressController do
 
       "null" ->
         {:ok, nil}
+
+      %Hash{byte_count: 32} = topic_hash ->
+        {:ok, topic_hash}
 
       _ ->
         with {:format, {:ok, topic}} <- {:format, Chain.string_to_full_hash(topic)} do
