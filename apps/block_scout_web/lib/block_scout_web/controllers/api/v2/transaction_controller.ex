@@ -59,6 +59,7 @@ defmodule BlockScoutWeb.API.V2.TransactionController do
   alias Explorer.Chain.Optimism.TransactionBatch, as: OptimismTransactionBatch
   alias Explorer.Chain.PolygonZkevm.Reader, as: PolygonZkevmReader
   alias Explorer.Chain.Scroll.Reader, as: ScrollReader
+  alias Explorer.Chain.Fluent.Reader, as: FluentReader
   alias Explorer.Chain.Token.Instance
   alias Explorer.Chain.ZkSync.Reader, as: ZkSyncReader
   alias Indexer.Fetcher.OnDemand.FirstTrace, as: FirstTraceOnDemand
@@ -467,6 +468,42 @@ defmodule BlockScoutWeb.API.V2.TransactionController do
   def scroll_batch(conn, %{batch_number_param: batch_number} = params) do
     {l2_block_number_from, l2_block_number_to} =
       case ScrollReader.batch(batch_number, @api_true) do
+        {:ok, batch} -> {batch.l2_block_range.from, batch.l2_block_range.to}
+        _ -> {nil, nil}
+      end
+
+    handle_block_range_transactions(conn, params, l2_block_number_from, l2_block_number_to)
+  end
+
+  operation :fluent_batch,
+    summary: "List L2 transactions in a Fluent batch",
+    description: "Retrieves L2 transactions bound to a specific Fluent batch number.",
+    parameters:
+      base_params() ++
+        [batch_number_param()] ++ define_paging_params(["block_number", "index", "items_count"]),
+    responses: [
+      ok:
+        {"Fluent batch transactions.", "application/json",
+         paginated_response(
+           items: Schemas.Transaction.Response,
+           next_page_params_example: %{
+             "block_number" => 14_127_868,
+             "index" => 0,
+             "items_count" => 50
+           }
+         )},
+      unprocessable_entity: JsonErrorResponse.response()
+    ]
+
+  @doc """
+    Function to handle GET requests to `/api/v2/transactions/fluent-batch/:batch_number` endpoint.
+    It renders the list of L2 transactions bound to the specified batch.
+  """
+  @spec fluent_batch(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def fluent_batch(conn, %{batch_number_param: batch_number} = params) do
+    {l2_block_number_from, l2_block_number_to} =
+      case FluentReader.batch(batch_number, @api_true) do
+        {:ok, %{l2_block_range: nil}} -> {nil, nil}
         {:ok, batch} -> {batch.l2_block_range.from, batch.l2_block_range.to}
         _ -> {nil, nil}
       end

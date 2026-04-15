@@ -178,6 +178,8 @@ defmodule BlockScoutWeb.Routers.ApiRouter do
         get("/scroll-batch/:batch_number_param", V2.TransactionController, :scroll_batch)
       end
 
+      get("/fluent-batch/:batch_number_param", V2.TransactionController, :fluent_batch)
+
       if @chain_type == :suave do
         get("/execution-node/:execution_node_hash_param", V2.TransactionController, :execution_node)
       end
@@ -231,6 +233,8 @@ defmodule BlockScoutWeb.Routers.ApiRouter do
         get("/scroll-batch/:batch_number_param", V2.BlockController, :scroll_batch)
       end
 
+      get("/fluent-batch/:batch_number_param", V2.BlockController, :fluent_batch)
+
       if @chain_type == :ethereum do
         get("/:block_hash_or_number_param/beacon/deposits", V2.BlockController, :beacon_deposits)
       end
@@ -240,6 +244,9 @@ defmodule BlockScoutWeb.Routers.ApiRouter do
       get("/runtime-upgrades", V2.FluentController, :runtime_upgrades)
       get("/runtime-upgrades/:genesis_hash", V2.FluentController, :runtime_upgrades_by_genesis_hash)
       get("/bridge-operations", V2.FluentController, :bridge_operations)
+      get("/batches", V2.FluentController, :batches)
+      get("/batches/count", V2.FluentController, :batches_count)
+      get("/batches/:number", V2.FluentController, :batch)
       get("/deposits", V2.FluentController, :deposits)
       get("/deposits/count", V2.FluentController, :deposits_count)
       get("/withdrawals", V2.FluentController, :withdrawals)
