@@ -762,7 +762,7 @@ defmodule BlockScoutWeb.API.V2.AddressController do
                items: %Schema{
                  type: :object,
                  properties: %{
-                   genesis_hash: Schemas.General.HashString,
+                   genesis_hash: Schemas.General.FullHash,
                    genesis_version: %Schema{type: :integer, nullable: true},
                    upgrades_count: %Schema{type: :integer, nullable: false}
                  },
@@ -806,7 +806,7 @@ defmodule BlockScoutWeb.API.V2.AddressController do
         %OpenApiSpex.Parameter{
           name: :genesis_hash,
           in: :path,
-          schema: Schemas.General.HashString,
+          schema: Schemas.General.FullHash,
           required: true,
           description: "Genesis hash in the path."
         }
@@ -819,14 +819,14 @@ defmodule BlockScoutWeb.API.V2.AddressController do
            items: %Schema{
              type: :object,
              properties: %{
-               transaction_hash: Schemas.General.HashString,
+               transaction_hash: Schemas.General.FullHash,
                block_number: %Schema{type: :integer, nullable: true},
                log_index: %Schema{type: :integer, nullable: true},
-               block_timestamp: Schemas.General.DateTime,
+               block_timestamp: Schemas.General.TimestampNullable,
                target_address_hash: Schemas.General.AddressHash,
-               genesis_hash: Schemas.General.HashString,
+               genesis_hash: Schemas.General.FullHash,
                genesis_version: %Schema{type: :integer, nullable: true},
-               code_hash: Schemas.General.HashString
+               code_hash: Schemas.General.FullHashNullable
              },
              nullable: false,
              additionalProperties: false
