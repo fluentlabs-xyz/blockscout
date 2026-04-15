@@ -806,9 +806,9 @@ defmodule BlockScoutWeb.API.V2.AddressController do
         %OpenApiSpex.Parameter{
           name: :genesis_hash,
           in: :path,
-          schema: Schemas.General.FullHash,
+          schema: %Schema{type: :string},
           required: true,
-          description: "Genesis hash in the path."
+          description: "Genesis hash in the path. Accepts 0x-prefixed full hash, bare 64-hex hash, optional quotes, and 0X prefix."
         }
       ] ++
         base_params() ++ define_paging_params(["block_number", "index", "items_count"]),
