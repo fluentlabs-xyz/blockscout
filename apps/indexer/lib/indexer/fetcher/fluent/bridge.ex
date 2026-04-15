@@ -25,6 +25,13 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
   @received_message_rollback_event
     "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessageRollback(bytes32,bool,bytes)"), case: :lower)
 
+  @supported_events [
+    @sent_message_event,
+    @received_message_event,
+    @rollback_message_event,
+    @received_message_rollback_event
+  ]
+
   @sent_message_event_params [{:uint, 256}, {:uint, 256}, {:uint, 256}, {:uint, 256}, {:bytes, 32}, :bytes]
 
   @spec loop(module(), %{
@@ -128,7 +135,7 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
         chunk_start,
         chunk_end,
         bridge_contract,
-        [[@sent_message_event, @received_message_event, @rollback_message_event, @received_message_rollback_event]],
+        [@supported_events],
         json_rpc_named_arguments,
         0,
         IndexerHelper.infinite_retries_number()
@@ -151,9 +158,11 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
   @spec prepare_operations([%{atom() => any()}], boolean(), EthereumJSONRPC.json_rpc_named_arguments()) ::
           [Explorer.Chain.Fluent.Bridge.to_import()]
   defp prepare_operations(events, is_l1, json_rpc_named_arguments) do
-    block_to_timestamp = blocks_to_timestamps(events, json_rpc_named_arguments)
+    supported_events = Enum.filter(events, &(&1.first_topic in @supported_events))
 
-    events
+    block_to_timestamp = blocks_to_timestamps(supported_events, json_rpc_named_arguments)
+
+    supported_events
     |> Enum.map(fn event ->
       topic = event.first_topic
       block_number = quantity_to_integer(event.block_number)
@@ -205,9 +214,12 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
           |> Map.put(:completion_kind, :received_message_rollback)
           |> extend_result(:successful_call, received_message_rollback.successful_call)
           |> extend_result(:return_data, received_message_rollback.return_data)
+
+        _ ->
+          nil
       end
     end)
-    |> Enum.reject(&is_nil(&1.message_hash))
+    |> Enum.reject(&(is_nil(&1) or is_nil(&1.message_hash)))
   end
 
   @spec blocks_to_timestamps([%{atom() => any()}], EthereumJSONRPC.json_rpc_named_arguments()) ::
