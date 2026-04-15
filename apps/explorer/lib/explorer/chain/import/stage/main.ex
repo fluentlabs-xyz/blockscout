@@ -12,6 +12,8 @@ defmodule Explorer.Chain.Import.Stage.Main do
     Runner.Address.CoinBalances,
     Runner.Address.CoinBalancesDaily,
     Runner.Transactions,
+    Runner.Fluent.BatchBundles,
+    Runner.Fluent.Batches,
     Runner.Fluent.BridgeOperations
   ]
 

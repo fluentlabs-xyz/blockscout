@@ -57,11 +57,23 @@ defmodule Indexer.Fetcher.RollupL1ReorgMonitor do
   end
 
   defp fluent_modules_for_reorg_monitor do
-    if Application.get_env(:indexer, Indexer.Fetcher.Fluent.BridgeL1.Supervisor, [])[:disabled?] == false do
-      [Indexer.Fetcher.Fluent.BridgeL1]
-    else
-      []
-    end
+    modules = []
+
+    modules =
+      if Application.get_env(:indexer, Indexer.Fetcher.Fluent.BridgeL1.Supervisor, [])[:disabled?] == false do
+        [Indexer.Fetcher.Fluent.BridgeL1 | modules]
+      else
+        modules
+      end
+
+    modules =
+      if Application.get_env(:indexer, Indexer.Fetcher.Fluent.Batch.Supervisor, [])[:disabled?] == false do
+        [Indexer.Fetcher.Fluent.Batch | modules]
+      else
+        modules
+      end
+
+    Enum.reverse(modules)
   end
 
   def child_spec(start_link_arguments) do

@@ -46,6 +46,7 @@ defmodule BlockScoutWeb.API.V2.BlockController do
   alias Explorer.Chain.Cache.{BlockNumber, Counters.AverageBlockTime}
   alias Explorer.Chain.Optimism.TransactionBatch, as: OptimismTransactionBatch
   alias Explorer.Chain.Scroll.Reader, as: ScrollReader
+  alias Explorer.Chain.Fluent.Reader, as: FluentReader
   alias Timex.Duration
 
   case @chain_type do
@@ -360,6 +361,53 @@ defmodule BlockScoutWeb.API.V2.BlockController do
     {blocks, next_page} =
       batch_number
       |> ScrollReader.batch_blocks(full_options)
+      |> split_list_by_page()
+
+    next_page_params = next_page |> next_page_params(blocks, params)
+
+    conn
+    |> put_status(200)
+    |> render(:blocks, %{
+      blocks: blocks |> maybe_preload_ens() |> maybe_preload_metadata(),
+      next_page_params: next_page_params
+    })
+  end
+
+  operation :fluent_batch,
+    summary: "List L2 blocks in a Fluent batch",
+    description: "Retrieves L2 blocks that are bound to a specific Fluent batch number.",
+    parameters:
+      base_params() ++
+        [batch_number_param()] ++
+        define_paging_params(["block_number", "items_count"]),
+    responses: [
+      ok:
+        {"L2 blocks in the specified Fluent batch.", "application/json",
+         paginated_response(
+           items: Schemas.Block,
+           next_page_params_example: %{
+             "block_number" => 22_566_361,
+             "items_count" => 50
+           }
+         )},
+      unprocessable_entity: JsonErrorResponse.response()
+    ]
+
+  @doc """
+    Function to handle GET requests to `/api/v2/blocks/fluent-batch/:batch_number_param` endpoint.
+    It renders the list of L2 blocks bound to the specified batch.
+  """
+  @spec fluent_batch(Plug.Conn.t(), any()) :: Plug.Conn.t()
+  def fluent_batch(conn, %{batch_number_param: batch_number} = params) do
+    full_options =
+      params
+      |> select_block_type()
+      |> Keyword.merge(paging_options(params))
+      |> Keyword.merge(@api_true)
+
+    {blocks, next_page} =
+      batch_number
+      |> FluentReader.batch_blocks(full_options)
       |> split_list_by_page()
 
     next_page_params = next_page |> next_page_params(blocks, params)

@@ -266,6 +266,102 @@ defmodule BlockScoutWeb.API.V2.FluentController do
     end
   end
 
+  operation :batch,
+    summary: "Get Fluent batch by number",
+    description: "Returns details for a specific indexed Fluent batch.",
+    parameters:
+      [
+        %OpenApiSpex.Parameter{
+          name: :number,
+          in: :path,
+          schema: %Schema{type: :integer},
+          required: true,
+          description: "Batch number."
+        }
+      ] ++ base_params(),
+    responses: [
+      ok: {"Fluent batch details.", "application/json", %Schema{type: :object, additionalProperties: true}},
+      not_found: BlockScoutWeb.Schemas.API.V2.ErrorResponses.NotFoundResponse.response(),
+      unprocessable_entity: JsonErrorResponse.response()
+    ]
+
+  @doc """
+  Handles GET requests to `/api/v2/fluent/batches/:number` endpoint.
+  """
+  @spec batch(Plug.Conn.t(), map()) :: Plug.Conn.t() | {:error, :not_found}
+  def batch(conn, %{number: number}) do
+    number = if is_binary(number), do: String.to_integer(number), else: number
+
+    options =
+      [necessity_by_association: %{bundle: :optional}]
+      |> Keyword.merge(@api_true)
+
+    case Reader.batch(number, options) do
+      {:ok, batch} ->
+        conn
+        |> put_status(200)
+        |> put_view(FluentView)
+        |> render(:fluent_batch, %{batch: batch})
+
+      {:error, :not_found} ->
+        {:error, :not_found}
+    end
+  end
+
+  operation :batches,
+    summary: "List indexed Fluent batches",
+    description: "Returns paginated indexed Fluent transaction batches.",
+    parameters: base_params() ++ define_paging_params(["number", "items_count"]),
+    responses: [
+      ok:
+        {"Fluent batches list.", "application/json",
+         paginated_response(
+           items: %Schema{type: :object, nullable: false, additionalProperties: true},
+           next_page_params_example: %{"number" => 128, "items_count" => 50}
+         )}
+    ]
+
+  @doc """
+  Handles GET requests to `/api/v2/fluent/batches` endpoint.
+  """
+  @spec batches(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def batches(conn, params) do
+    {batches, next_page} =
+      params
+      |> paging_options()
+      |> Keyword.merge(@api_true)
+      |> Reader.batches()
+      |> split_list_by_page()
+
+    next_page_params =
+      next_page
+      |> next_page_params(batches, delete_parameters_from_next_page_params(params))
+
+    conn
+    |> put_status(200)
+    |> put_view(FluentView)
+    |> render(:fluent_batches, %{batches: batches, next_page_params: next_page_params})
+  end
+
+  operation :batches_count,
+    summary: "Count indexed Fluent batches",
+    description: "Returns total count of indexed Fluent batches.",
+    parameters: base_params(),
+    responses: [
+      ok: {"Fluent batches count.", "application/json", %Schema{type: :integer, nullable: false}}
+    ]
+
+  @doc """
+  Handles GET requests to `/api/v2/fluent/batches/count` endpoint.
+  """
+  @spec batches_count(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def batches_count(conn, _params) do
+    conn
+    |> put_status(200)
+    |> put_view(FluentView)
+    |> render(:fluent_batches_count, %{count: batch_latest_number() + 1})
+  end
+
   operation :deposits,
     summary: "List indexed Fluent deposits",
     description: "Returns paginated deposit operations indexed from Fluent bridge events on L1 and L2.",
@@ -376,6 +472,13 @@ defmodule BlockScoutWeb.API.V2.FluentController do
     |> put_status(200)
     |> put_view(FluentView)
     |> render(:fluent_bridge_items_count, %{count: count})
+  end
+
+  defp batch_latest_number do
+    case Reader.batch(:latest, @api_true) do
+      {:ok, batch} -> batch.number
+      {:error, :not_found} -> -1
+    end
   end
 
   @spec validate_address_hash(String.t(), any()) ::

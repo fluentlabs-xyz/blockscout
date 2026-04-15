@@ -229,6 +229,10 @@ defmodule Indexer.Supervisor do
          [
            [memory_monitor: memory_monitor]
          ]},
+        {Indexer.Fetcher.Fluent.Batch.Supervisor,
+         [
+           [memory_monitor: memory_monitor]
+         ]},
         {Indexer.Fetcher.Fluent.BridgeL2.Supervisor,
          [
            [json_rpc_named_arguments: json_rpc_named_arguments, memory_monitor: memory_monitor]
