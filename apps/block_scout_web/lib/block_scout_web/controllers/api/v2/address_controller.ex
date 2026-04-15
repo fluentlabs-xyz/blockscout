@@ -844,7 +844,7 @@ defmodule BlockScoutWeb.API.V2.AddressController do
   the fixed runtime-upgrade system contract.
   """
   @spec runtime_upgrades_by_genesis_hash(Plug.Conn.t(), map()) :: {:format, :error} | Plug.Conn.t()
-  def runtime_upgrades_by_genesis_hash(conn, %{"genesis_hash" => genesis_hash_param} = params) do
+  def runtime_upgrades_by_genesis_hash(conn, %{genesis_hash: genesis_hash_param} = params) do
     with {:ok, genesis_hash} <- validate_optional_topic(genesis_hash_param) do
       {logs, next_page_params} =
         case @runtime_upgrades_address_hash do
