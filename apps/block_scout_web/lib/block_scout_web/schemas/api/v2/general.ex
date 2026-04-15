@@ -1037,6 +1037,13 @@ defmodule BlockScoutWeb.Schemas.API.V2.General do
       required: false,
       description: "Epoch number for paging"
     },
+    "number" => %Parameter{
+      name: :number,
+      in: :query,
+      schema: IntegerString,
+      required: false,
+      description: "Number for paging"
+    },
     "nonce" => %Parameter{
       name: :nonce,
       in: :query,
