@@ -182,7 +182,9 @@ defmodule Indexer.Fetcher.RollupL1ReorgMonitor do
       ) do
     {:ok, latest} = Helper.get_block_number_by_tag("latest", json_rpc_named_arguments, Helper.infinite_retries_number())
 
-    LatestL1BlockNumber.set_block_number(latest)
+    if Process.whereis(LatestL1BlockNumber.cache_name()) do
+      LatestL1BlockNumber.set_block_number(latest)
+    end
 
     if latest < prev_latest do
       Logger.warning("Reorg detected: previous latest block ##{prev_latest}, current latest block ##{latest}.")
