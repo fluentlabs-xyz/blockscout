@@ -1799,7 +1799,18 @@ defmodule BlockScoutWeb.API.V2.AddressController do
 
   @spec validate_optional_topic(nil | String.t()) :: {:ok, nil | Hash.Full.t()} | {:format, :error}
   defp validate_optional_topic(topic) do
-    topic = if is_binary(topic), do: String.trim(topic), else: topic
+    topic =
+      if is_binary(topic) do
+        topic
+        |> String.trim()
+        |> String.trim_leading("\"")
+        |> String.trim_trailing("\"")
+        |> String.trim_leading("'")
+        |> String.trim_trailing("'")
+        |> normalize_full_hash_input()
+      else
+        topic
+      end
 
     case topic do
       nil ->
@@ -1815,6 +1826,16 @@ defmodule BlockScoutWeb.API.V2.AddressController do
         with {:format, {:ok, topic}} <- {:format, Chain.string_to_full_hash(topic)} do
           {:ok, topic}
         end
+    end
+  end
+
+  defp normalize_full_hash_input(<<"0X", rest::binary>>), do: "0x" <> rest
+
+  defp normalize_full_hash_input(topic) when is_binary(topic) do
+    if String.match?(topic, ~r/^[A-Fa-f0-9]{64}$/) do
+      "0x" <> topic
+    else
+      topic
     end
   end
 
