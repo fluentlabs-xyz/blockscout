@@ -1670,6 +1670,25 @@ config :indexer, Indexer.Fetcher.Scroll.BridgeL2.Supervisor, disabled?: ConfigHe
 
 config :indexer, Indexer.Fetcher.Scroll.Batch.Supervisor, disabled?: ConfigHelper.chain_type() != :scroll
 
+fluent_bridge_enabled? = ConfigHelper.parse_bool_env_var("INDEXER_FLUENT_BRIDGE_ENABLED", "false")
+
+config :indexer, Indexer.Fetcher.Fluent,
+  l1_eth_get_logs_range_size: ConfigHelper.parse_integer_env_var("INDEXER_FLUENT_L1_ETH_GET_LOGS_RANGE_SIZE", 250),
+  l2_eth_get_logs_range_size: ConfigHelper.parse_integer_env_var("INDEXER_FLUENT_L2_ETH_GET_LOGS_RANGE_SIZE", 1_000),
+  rpc: System.get_env("INDEXER_FLUENT_L1_RPC")
+
+config :indexer, Indexer.Fetcher.Fluent.BridgeL1,
+  bridge_contract: System.get_env("INDEXER_FLUENT_L1_BRIDGE_CONTRACT"),
+  start_block: ConfigHelper.parse_integer_or_nil_env_var("INDEXER_FLUENT_L1_BRIDGE_START_BLOCK")
+
+config :indexer, Indexer.Fetcher.Fluent.BridgeL2,
+  bridge_contract: System.get_env("INDEXER_FLUENT_L2_BRIDGE_CONTRACT"),
+  start_block: ConfigHelper.parse_integer_env_var("INDEXER_FLUENT_L2_BRIDGE_START_BLOCK", first_block)
+
+config :indexer, Indexer.Fetcher.Fluent.BridgeL1.Supervisor, disabled?: not fluent_bridge_enabled?
+
+config :indexer, Indexer.Fetcher.Fluent.BridgeL2.Supervisor, disabled?: not fluent_bridge_enabled?
+
 config :indexer, Indexer.Utils.EventNotificationsCleaner,
   interval: ConfigHelper.parse_time_env_var("INDEXER_DB_EVENT_NOTIFICATIONS_CLEANUP_INTERVAL", "2m"),
   enabled:

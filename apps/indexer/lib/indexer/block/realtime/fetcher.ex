@@ -380,6 +380,10 @@ defmodule Indexer.Block.Realtime.Fetcher do
   defp remove_assets_by_number(reorg_block) do
     chain_type = Application.get_env(:explorer, :chain_type)
     do_remove_assets_by_number(chain_type, reorg_block)
+
+    if fluent_bridge_enabled?() do
+      Indexer.Fetcher.Fluent.BridgeL2.reorg_handle(reorg_block)
+    end
   end
 
   # Removes all rows from `op_transaction_batches`, `op_withdrawals`,
@@ -417,6 +421,10 @@ defmodule Indexer.Block.Realtime.Fetcher do
   end
 
   defp do_remove_assets_by_number(_, _), do: :ok
+
+  defp fluent_bridge_enabled? do
+    Application.get_env(:indexer, Indexer.Fetcher.Fluent.BridgeL2.Supervisor, [])[:disabled?] == false
+  end
 
   @decorate span(tracer: Tracer)
   defp do_fetch_and_import_block(block_number_to_fetch, block_fetcher, retry) do

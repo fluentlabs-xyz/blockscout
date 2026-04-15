@@ -225,6 +225,14 @@ defmodule Indexer.Supervisor do
          [
            [memory_monitor: memory_monitor]
          ]},
+        {Indexer.Fetcher.Fluent.BridgeL1.Supervisor,
+         [
+           [memory_monitor: memory_monitor]
+         ]},
+        {Indexer.Fetcher.Fluent.BridgeL2.Supervisor,
+         [
+           [json_rpc_named_arguments: json_rpc_named_arguments, memory_monitor: memory_monitor]
+         ]},
         configure(Indexer.Fetcher.PolygonZkevm.BridgeL1.Supervisor, [[memory_monitor: memory_monitor]]),
         configure(Indexer.Fetcher.PolygonZkevm.BridgeL1Tokens.Supervisor, [[memory_monitor: memory_monitor]]),
         configure(Indexer.Fetcher.PolygonZkevm.BridgeL2.Supervisor, [

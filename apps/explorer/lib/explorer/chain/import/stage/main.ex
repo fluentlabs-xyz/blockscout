@@ -11,7 +11,8 @@ defmodule Explorer.Chain.Import.Stage.Main do
     Runner.Tokens,
     Runner.Address.CoinBalances,
     Runner.Address.CoinBalancesDaily,
-    Runner.Transactions
+    Runner.Transactions,
+    Runner.Fluent.BridgeOperations
   ]
 
   @impl Stage

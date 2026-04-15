@@ -23,33 +23,44 @@ defmodule Indexer.Fetcher.RollupL1ReorgMonitor do
   defp modules_can_use_reorg_monitor do
     chain_type = Application.get_env(:explorer, :chain_type)
 
-    case chain_type do
-      :optimism ->
-        [
-          Indexer.Fetcher.Optimism.Deposit,
-          Indexer.Fetcher.Optimism.OutputRoot,
-          Indexer.Fetcher.Optimism.TransactionBatch,
-          Indexer.Fetcher.Optimism.WithdrawalEvent
-        ]
+    base_modules =
+      case chain_type do
+        :optimism ->
+          [
+            Indexer.Fetcher.Optimism.Deposit,
+            Indexer.Fetcher.Optimism.OutputRoot,
+            Indexer.Fetcher.Optimism.TransactionBatch,
+            Indexer.Fetcher.Optimism.WithdrawalEvent
+          ]
 
-      :polygon_zkevm ->
-        [
-          Indexer.Fetcher.PolygonZkevm.BridgeL1
-        ]
+        :polygon_zkevm ->
+          [
+            Indexer.Fetcher.PolygonZkevm.BridgeL1
+          ]
 
-      :scroll ->
-        [
-          Indexer.Fetcher.Scroll.Batch,
-          Indexer.Fetcher.Scroll.BridgeL1
-        ]
+        :scroll ->
+          [
+            Indexer.Fetcher.Scroll.Batch,
+            Indexer.Fetcher.Scroll.BridgeL1
+          ]
 
-      :shibarium ->
-        [
-          Indexer.Fetcher.Shibarium.L1
-        ]
+        :shibarium ->
+          [
+            Indexer.Fetcher.Shibarium.L1
+          ]
 
-      _ ->
-        []
+        _ ->
+          []
+      end
+
+    base_modules ++ fluent_modules_for_reorg_monitor()
+  end
+
+  defp fluent_modules_for_reorg_monitor do
+    if Application.get_env(:indexer, Indexer.Fetcher.Fluent.BridgeL1.Supervisor, [])[:disabled?] == false do
+      [Indexer.Fetcher.Fluent.BridgeL1]
+    else
+      []
     end
   end
 

@@ -11,9 +11,10 @@ defmodule BlockScoutWeb.API.V2.FluentController do
 
   import BlockScoutWeb.PagingHelper, only: [delete_parameters_from_next_page_params: 1]
 
-  alias BlockScoutWeb.API.V2.AddressView
+  alias BlockScoutWeb.API.V2.{AddressView, FluentView}
   alias BlockScoutWeb.AccessHelper
   alias Explorer.Chain
+  alias Explorer.Chain.Fluent.Reader
   alias Explorer.Chain.Hash
 
   action_fallback(BlockScoutWeb.API.V2.FallbackController)
@@ -263,6 +264,118 @@ defmodule BlockScoutWeb.API.V2.FluentController do
       |> put_view(AddressView)
       |> render(:bridge_operation_logs, %{logs: logs, next_page_params: next_page_params})
     end
+  end
+
+  operation :deposits,
+    summary: "List indexed Fluent deposits",
+    description: "Returns paginated deposit operations indexed from Fluent bridge events on L1 and L2.",
+    parameters: base_params() ++ define_paging_params(["id", "items_count"]),
+    responses: [
+      ok:
+        {"Fluent deposits list.", "application/json",
+         paginated_response(
+           items: %Schema{type: :object, nullable: false, additionalProperties: true},
+           next_page_params_example: %{"id" => 128, "items_count" => 50}
+         )}
+    ]
+
+  @doc """
+  Handles GET requests to `/api/v2/fluent/deposits` endpoint.
+  """
+  @spec deposits(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def deposits(conn, params) do
+    {deposits, next_page} =
+      params
+      |> paging_options()
+      |> Keyword.merge(@api_true)
+      |> Reader.deposits()
+      |> split_list_by_page()
+
+    next_page_params =
+      next_page
+      |> next_page_params(deposits, delete_parameters_from_next_page_params(params))
+
+    conn
+    |> put_status(200)
+    |> put_view(FluentView)
+    |> render(:fluent_bridge_items, %{items: deposits, next_page_params: next_page_params, type: :deposits})
+  end
+
+  operation :deposits_count,
+    summary: "Count indexed Fluent deposits",
+    description: "Returns total count of indexed Fluent deposits.",
+    parameters: base_params(),
+    responses: [
+      ok: {"Fluent deposits count.", "application/json", %Schema{type: :integer, nullable: false}}
+    ]
+
+  @doc """
+  Handles GET requests to `/api/v2/fluent/deposits/count` endpoint.
+  """
+  @spec deposits_count(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def deposits_count(conn, _params) do
+    count = Reader.deposits_count(@api_true)
+
+    conn
+    |> put_status(200)
+    |> put_view(FluentView)
+    |> render(:fluent_bridge_items_count, %{count: count})
+  end
+
+  operation :withdrawals,
+    summary: "List indexed Fluent withdrawals",
+    description: "Returns paginated withdrawal operations indexed from Fluent bridge events on L1 and L2.",
+    parameters: base_params() ++ define_paging_params(["id", "items_count"]),
+    responses: [
+      ok:
+        {"Fluent withdrawals list.", "application/json",
+         paginated_response(
+           items: %Schema{type: :object, nullable: false, additionalProperties: true},
+           next_page_params_example: %{"id" => 128, "items_count" => 50}
+         )}
+    ]
+
+  @doc """
+  Handles GET requests to `/api/v2/fluent/withdrawals` endpoint.
+  """
+  @spec withdrawals(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def withdrawals(conn, params) do
+    {withdrawals, next_page} =
+      params
+      |> paging_options()
+      |> Keyword.merge(@api_true)
+      |> Reader.withdrawals()
+      |> split_list_by_page()
+
+    next_page_params =
+      next_page
+      |> next_page_params(withdrawals, delete_parameters_from_next_page_params(params))
+
+    conn
+    |> put_status(200)
+    |> put_view(FluentView)
+    |> render(:fluent_bridge_items, %{items: withdrawals, next_page_params: next_page_params, type: :withdrawals})
+  end
+
+  operation :withdrawals_count,
+    summary: "Count indexed Fluent withdrawals",
+    description: "Returns total count of indexed Fluent withdrawals.",
+    parameters: base_params(),
+    responses: [
+      ok: {"Fluent withdrawals count.", "application/json", %Schema{type: :integer, nullable: false}}
+    ]
+
+  @doc """
+  Handles GET requests to `/api/v2/fluent/withdrawals/count` endpoint.
+  """
+  @spec withdrawals_count(Plug.Conn.t(), map()) :: Plug.Conn.t()
+  def withdrawals_count(conn, _params) do
+    count = Reader.withdrawals_count(@api_true)
+
+    conn
+    |> put_status(200)
+    |> put_view(FluentView)
+    |> render(:fluent_bridge_items_count, %{count: count})
   end
 
   @spec validate_address_hash(String.t(), any()) ::
