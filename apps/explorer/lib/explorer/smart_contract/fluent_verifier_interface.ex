@@ -43,10 +43,9 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
     - `{:ok, versions_map}` - A map containing `sdk_versions` and `latest_stable`.
     - `{:error, any()}` - An error tuple if the request fails.
   """
-  @spec list_available_versions(boolean()) :: {:ok, map()} | {:error, any()}
+  @spec list_available_versions(boolean()) :: {:ok, map() | [String.t()]} | {:error, any()}
   def list_available_versions(include_prerelease \\ false) do
-    body = %{include_prerelease: include_prerelease}
-    http_post_request(list_versions_url(), body)
+    http_get_request(available_versions_url(), %{include_prerelease: include_prerelease})
   end
 
   @doc """
@@ -56,9 +55,11 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
   with default parameters, ensuring that older parts of the application that
   still rely on the old interface continue to work without modification.
   """
-  @spec get_versions_list() :: {:ok, map()} | {:error, any()}
+  @spec get_versions_list() :: {:ok, [String.t()]} | {:error, any()}
   def get_versions_list() do
-    list_available_versions(true)
+    with {:ok, payload} <- list_available_versions(false) do
+      normalize_versions_response(payload)
+    end
   end
 
   @doc """
@@ -92,13 +93,52 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
 
       {:ok, %Response{body: response_body, status_code: status}} ->
         Logger.error("Fluent verifier returned non-2xx status #{status}: #{response_body}")
-        {:error, %{"message" => "Verification service returned status #{status}"}}
+        {:error, %{"message" => "Verification service returned status #{status}", "status" => status}}
 
       {:error, %HTTPoison.Error{reason: reason} = error} ->
         Logger.error(fn ->
           [
             "Error sending request to fluent verifier at #{url}: #{inspect(reason)}",
             ", body: #{inspect(body, limit: :infinity, printable_limit: :infinity)}"
+          ]
+        end)
+
+        {:error, %{"message" => @request_error_msg, "details" => inspect(error)}}
+    end
+  end
+
+  defp http_get_request(url, query_params \\ %{}) do
+    headers = [{"Content-Type", "application/json"}]
+
+    request_url =
+      case query_params do
+        %{} = params when map_size(params) > 0 ->
+          encoded_query = URI.encode_query(params)
+          "#{url}?#{encoded_query}"
+
+        _ ->
+          url
+      end
+
+    Logger.info(fn ->
+      [
+        "Attempting to send GET request to Fluent Verifier.",
+        "\n  URL: #{request_url}"
+      ]
+    end)
+
+    case HTTPoison.get(request_url, headers, recv_timeout: @post_timeout) do
+      {:ok, %Response{body: response_body, status_code: status}} when status in 200..299 ->
+        process_response(response_body)
+
+      {:ok, %Response{body: response_body, status_code: status}} ->
+        Logger.error("Fluent verifier returned non-2xx status #{status}: #{response_body}")
+        {:error, %{"message" => "Verification service returned status #{status}", "status" => status}}
+
+      {:error, %HTTPoison.Error{reason: reason} = error} ->
+        Logger.error(fn ->
+          [
+            "Error sending GET request to fluent verifier at #{request_url}: #{inspect(reason)}"
           ]
         end)
 
@@ -123,6 +163,15 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
   defp process_decoded_response(%{"sdk_versions" => _} = response),
     do: {:ok, response}
 
+  defp process_decoded_response(%{"versions" => _} = response),
+    do: {:ok, response}
+
+  defp process_decoded_response(%{"fluentbase_sdk_versions" => _, "rustc_versions" => _} = response),
+    do: {:ok, response}
+
+  defp process_decoded_response(%{"fluentbaseSdkVersions" => _, "rustcVersions" => _} = response),
+    do: {:ok, response}
+
   defp process_decoded_response(other),
     do: {:error, %{"message" => "Invalid response format from verifier", "details" => other}}
 
@@ -139,11 +188,40 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
     {:error, %{"status" => status, "error_message" => error_message}}
   end
 
+  defp normalize_versions_response(%{"sdk_versions" => versions}) when is_list(versions),
+    do: {:ok, extract_version_values(versions)}
+
+  defp normalize_versions_response(%{"versions" => versions}) when is_list(versions),
+    do: {:ok, extract_version_values(versions)}
+
+  defp normalize_versions_response(%{"fluentbase_sdk_versions" => versions}) when is_list(versions),
+    do: {:ok, extract_version_values(versions)}
+
+  defp normalize_versions_response(%{"fluentbaseSdkVersions" => versions}) when is_list(versions),
+    do: {:ok, extract_version_values(versions)}
+
+  defp normalize_versions_response(versions) when is_list(versions),
+    do: {:ok, extract_version_values(versions)}
+
+  defp normalize_versions_response(other),
+    do: {:error, %{"message" => "Invalid versions response format", "details" => other}}
+
+  defp extract_version_values(versions) do
+    versions
+    |> Enum.map(fn
+      %{"version" => version} when is_binary(version) -> version
+      %{"sdk_version" => version} when is_binary(version) -> version
+      version when is_binary(version) -> version
+      _ -> nil
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
   #
   # URL Helpers
   #
 
   defp base_url, do: Application.get_env(:explorer, __MODULE__)[:service_url]
   defp verify_wasm_url, do: base_url() <> "/api/v1/fluent/verify-wasm"
-  defp list_versions_url, do: base_url() <> "/api/v1/fluent/available-versions"
+  defp available_versions_url, do: base_url() <> "/api/v1/fluent/available-versions"
 end
