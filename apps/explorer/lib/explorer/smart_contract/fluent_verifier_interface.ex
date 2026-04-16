@@ -58,7 +58,7 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
   """
   @spec get_versions_list() :: {:ok, map()} | {:error, any()}
   def get_versions_list() do
-    list_available_versions(false)
+    list_available_versions(true)
   end
 
   @doc """
@@ -145,5 +145,5 @@ defmodule Explorer.SmartContract.FluentVerifierInterface do
 
   defp base_url, do: Application.get_env(:explorer, __MODULE__)[:service_url]
   defp verify_wasm_url, do: base_url() <> "/api/v1/fluent/verify-wasm"
-  defp list_versions_url, do: base_url() <> "/api/v1/fluent/list-versions"
+  defp list_versions_url, do: base_url() <> "/api/v1/fluent/available-versions"
 end
