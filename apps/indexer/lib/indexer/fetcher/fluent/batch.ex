@@ -208,8 +208,10 @@ defmodule Indexer.Fetcher.Fluent.Batch do
       ) do
     time_before = Timex.now()
 
+    block_range = if(start_block <= end_block, do: start_block..end_block, else: [])
+
     last_written_block =
-      start_block..end_block
+      block_range
       |> Enum.chunk_every(eth_get_logs_range_size)
       |> Enum.reduce_while(start_block - 1, fn current_chunk, _ ->
         chunk_start = List.first(current_chunk)
@@ -260,7 +262,7 @@ defmodule Indexer.Fetcher.Fluent.Batch do
       Helper.get_block_number_by_tag("latest", json_rpc_named_arguments, Helper.infinite_retries_number())
 
     delay =
-      if new_end_block == last_written_block do
+      if new_end_block < new_start_block do
         # there is no new block, so wait for some time to let the chain issue the new block
         max(block_check_interval - Timex.diff(Timex.now(), time_before, :milliseconds), 0)
       else
