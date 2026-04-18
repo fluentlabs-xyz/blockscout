@@ -59,6 +59,10 @@ defmodule Indexer.Fetcher.Fluent.BridgeL2 do
            Helper.get_transaction_by_hash(last_l2_transaction_hash, json_rpc_named_arguments),
          {:l2_transaction_not_found, false} <-
            {:l2_transaction_not_found, !is_nil(last_l2_transaction_hash) && is_nil(last_l2_transaction)} do
+      Logger.info(
+        "Fluent bridge L2 init debug context. rpc_urls=#{inspect(rpc_urls(json_rpc_named_arguments))} bridge_contract=#{inspect(env[:bridge_contract])} configured_start_block=#{inspect(env[:start_block])} last_l2_block_number=#{inspect(last_l2_block_number)} latest_block=#{inspect(latest_block)} block_check_interval_ms=#{inspect(block_check_interval)} last_l2_transaction_hash=#{inspect(last_l2_transaction_hash)}"
+      )
+
       Process.send(self(), :continue, [])
 
       {:noreply,
@@ -140,4 +144,12 @@ defmodule Indexer.Fetcher.Fluent.BridgeL2 do
 
     RollupReorgMonitorQueue.reorg_block_push(reorg_block, __MODULE__)
   end
+
+  defp rpc_urls(json_rpc_named_arguments) when is_list(json_rpc_named_arguments) do
+    json_rpc_named_arguments
+    |> Keyword.get(:transport_options, [])
+    |> Keyword.get(:urls, [])
+  end
+
+  defp rpc_urls(_), do: []
 end
