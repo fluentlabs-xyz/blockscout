@@ -87,7 +87,10 @@ defmodule Explorer.Chain.Import.Runner.Fluent.BridgeOperations do
           sender_address_hash: fragment("COALESCE(EXCLUDED.sender_address_hash, ?)", fb.sender_address_hash),
           target_address_hash: fragment("COALESCE(EXCLUDED.target_address_hash, ?)", fb.target_address_hash),
           amount: fragment("COALESCE(EXCLUDED.amount, ?)", fb.amount),
+          fee: fragment("COALESCE(EXCLUDED.fee, ?)", fb.fee),
           chain_id: fragment("COALESCE(EXCLUDED.chain_id, ?)", fb.chain_id),
+          valid_until_block_number:
+            fragment("COALESCE(EXCLUDED.valid_until_block_number, ?)", fb.valid_until_block_number),
           source_block_number: fragment("COALESCE(EXCLUDED.source_block_number, ?)", fb.source_block_number),
           l1_transaction_hash: fragment("COALESCE(EXCLUDED.l1_transaction_hash, ?)", fb.l1_transaction_hash),
           l1_block_number: fragment("COALESCE(EXCLUDED.l1_block_number, ?)", fb.l1_block_number),
@@ -105,12 +108,14 @@ defmodule Explorer.Chain.Import.Runner.Fluent.BridgeOperations do
       ],
       where:
         fragment(
-          "(EXCLUDED.nonce, EXCLUDED.sender_address_hash, EXCLUDED.target_address_hash, EXCLUDED.amount, EXCLUDED.chain_id, EXCLUDED.source_block_number, EXCLUDED.l1_transaction_hash, EXCLUDED.l1_block_number, EXCLUDED.l1_timestamp, EXCLUDED.l2_transaction_hash, EXCLUDED.l2_block_number, EXCLUDED.l2_timestamp, EXCLUDED.completion_kind, EXCLUDED.successful_call, EXCLUDED.rollback_block_number, EXCLUDED.return_data) IS DISTINCT FROM (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "(EXCLUDED.nonce, EXCLUDED.sender_address_hash, EXCLUDED.target_address_hash, EXCLUDED.amount, EXCLUDED.fee, EXCLUDED.chain_id, EXCLUDED.valid_until_block_number, EXCLUDED.source_block_number, EXCLUDED.l1_transaction_hash, EXCLUDED.l1_block_number, EXCLUDED.l1_timestamp, EXCLUDED.l2_transaction_hash, EXCLUDED.l2_block_number, EXCLUDED.l2_timestamp, EXCLUDED.completion_kind, EXCLUDED.successful_call, EXCLUDED.rollback_block_number, EXCLUDED.return_data) IS DISTINCT FROM (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           fb.nonce,
           fb.sender_address_hash,
           fb.target_address_hash,
           fb.amount,
+          fb.fee,
           fb.chain_id,
+          fb.valid_until_block_number,
           fb.source_block_number,
           fb.l1_transaction_hash,
           fb.l1_block_number,

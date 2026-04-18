@@ -175,7 +175,7 @@ defmodule BlockScoutWeb.API.V2.FluentController do
             schema: %Schema{type: :string, enum: ["deposit", "withdraw"]},
             required: false,
             description:
-              "Optional operation filter. `deposit` returns `SentMessage`; `withdraw` returns `ReceivedMessage`, `RollbackMessage`, and `ReceivedMessageRollback`."
+              "Optional operation filter. `deposit` returns `SentMessage`; `withdraw` returns `ReceivedMessage`, `RollbackMessage`, `RetriedFailedMessage`, and `ReceivedMessageRollback`."
           },
           %OpenApiSpex.Parameter{
             name: :bridge_address,
@@ -200,14 +200,16 @@ defmodule BlockScoutWeb.API.V2.FluentController do
                bridge_address: Schemas.General.AddressHashNullable,
                event: %Schema{
                  type: :string,
-                 enum: ["sent_message", "received_message", "rollback_message", "received_message_rollback"],
+                 enum: ["sent_message", "received_message", "rollback_message", "retried_failed_message", "received_message_rollback"],
                  nullable: true
                },
                operation: %Schema{type: :string, enum: ["deposit", "withdraw"], nullable: true},
                sender_address_hash: Schemas.General.AddressHashNullable,
                target_address_hash: Schemas.General.AddressHashNullable,
                value: %Schema{type: :integer, nullable: true},
+               fee: %Schema{type: :integer, nullable: true},
                chain_id: %Schema{type: :integer, nullable: true},
+               valid_until_block_number: %Schema{type: :integer, nullable: true},
                source_block_number: %Schema{type: :integer, nullable: true},
                nonce: %Schema{type: :integer, nullable: true},
                message_hash: Schemas.General.FullHashNullable,
