@@ -68,10 +68,6 @@ defmodule Indexer.Fetcher.Fluent.BridgeL1 do
            Helper.get_transaction_by_hash(last_l1_transaction_hash, json_rpc_named_arguments),
          {:l1_transaction_not_found, false} <-
            {:l1_transaction_not_found, !is_nil(last_l1_transaction_hash) && is_nil(last_l1_transaction)} do
-      Logger.info(
-        "Fluent bridge L1 init debug context. rpc_url=#{inspect(rpc)} bridge_contract=#{inspect(env[:bridge_contract])} configured_start_block=#{inspect(start_block)} last_l1_block_number=#{inspect(last_l1_block_number)} safe_block=#{inspect(safe_block)} block_check_interval_ms=#{inspect(block_check_interval)} last_l1_transaction_hash=#{inspect(last_l1_transaction_hash)}"
-      )
-
       Process.send(self(), :continue, [])
 
       {:noreply,

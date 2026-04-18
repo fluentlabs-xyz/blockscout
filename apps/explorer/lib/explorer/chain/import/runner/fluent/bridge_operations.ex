@@ -3,6 +3,7 @@ defmodule Explorer.Chain.Import.Runner.Fluent.BridgeOperations do
   Bulk imports `Explorer.Chain.Fluent.Bridge`.
   """
 
+  require Logger
   require Ecto.Query
 
   import Ecto.Query, only: [from: 2]
@@ -62,11 +63,18 @@ defmodule Explorer.Chain.Import.Runner.Fluent.BridgeOperations do
     on_conflict = Map.get_lazy(options, :on_conflict, &default_on_conflict/0)
 
     ordered_changes_list = Enum.sort_by(changes_list, &{&1.type, &1.message_hash})
+    deduplicated_changes_list = deduplicate_changes_list(ordered_changes_list)
+
+    if length(deduplicated_changes_list) < length(ordered_changes_list) do
+      Logger.warning(
+        "Fluent bridge import deduplicated conflicting operations in one batch. original=#{length(ordered_changes_list)} deduplicated=#{length(deduplicated_changes_list)} duplicate_keys_sample=#{inspect(duplicate_keys_sample(ordered_changes_list))}"
+      )
+    end
 
     {:ok, inserted} =
       Import.insert_changes_list(
         repo,
-        ordered_changes_list,
+        deduplicated_changes_list,
         conflict_target: [:type, :message_hash],
         on_conflict: on_conflict,
         for: FluentBridge,
@@ -76,6 +84,39 @@ defmodule Explorer.Chain.Import.Runner.Fluent.BridgeOperations do
       )
 
     {:ok, inserted}
+  end
+
+  defp deduplicate_changes_list(changes_list) do
+    {merged_by_key, key_order} =
+      Enum.reduce(changes_list, {%{}, []}, fn change, {acc, order} ->
+        key = {change.type, change.message_hash}
+
+        case Map.fetch(acc, key) do
+          {:ok, existing_change} ->
+            {Map.put(acc, key, merge_change(existing_change, change)), order}
+
+          :error ->
+            {Map.put(acc, key, change), [key | order]}
+        end
+      end)
+
+    key_order
+    |> Enum.reverse()
+    |> Enum.map(&Map.fetch!(merged_by_key, &1))
+  end
+
+  defp merge_change(existing_change, incoming_change) do
+    Map.merge(existing_change, incoming_change, fn _key, existing_value, incoming_value ->
+      if is_nil(incoming_value), do: existing_value, else: incoming_value
+    end)
+  end
+
+  defp duplicate_keys_sample(changes_list) do
+    changes_list
+    |> Enum.frequencies_by(&{&1.type, &1.message_hash})
+    |> Enum.filter(fn {_key, count} -> count > 1 end)
+    |> Enum.take(5)
+    |> Enum.map(fn {{type, message_hash}, count} -> %{type: type, message_hash: message_hash, count: count} end)
   end
 
   defp default_on_conflict do
