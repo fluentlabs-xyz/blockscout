@@ -20,27 +20,35 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
   alias Indexer.Fetcher.Fluent.BridgeL1
   alias Indexer.Helper, as: IndexerHelper
 
-  @sent_message_event
-    "0x" <>
-      Base.encode16(
-        ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,uint256,bytes32,bytes)"),
-        case: :lower
-      )
+  @sent_message_event "0x" <>
+                        Base.encode16(
+                          ExKeccak.hash_256(
+                            "SentMessage(address,address,uint256,uint256,uint256,uint256,uint256,bytes32,bytes)"
+                          ),
+                          case: :lower
+                        )
 
-  @legacy_sent_message_event
-    "0x" <>
-      Base.encode16(
-        ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,bytes32,bytes)"),
-        case: :lower
-      )
+  @legacy_sent_message_event "0x" <>
+                               Base.encode16(
+                                 ExKeccak.hash_256(
+                                   "SentMessage(address,address,uint256,uint256,uint256,uint256,bytes32,bytes)"
+                                 ),
+                                 case: :lower
+                               )
 
   @received_message_event "0xc5797c3a3c0e6c245576d05b8c3929881b44e1a21fdb4f1b118ede3c009683c5"
   @rollback_message_event "0x" <> Base.encode16(ExKeccak.hash_256("RollbackMessage(bytes32,uint256)"), case: :lower)
-  @retried_failed_message_event
-    "0x" <> Base.encode16(ExKeccak.hash_256("RetriedFailedMessage(bytes32,bool,bytes)"), case: :lower)
+  @retried_failed_message_event "0x" <>
+                                  Base.encode16(
+                                    ExKeccak.hash_256("RetriedFailedMessage(bytes32,bool,bytes)"),
+                                    case: :lower
+                                  )
 
-  @received_message_rollback_event
-    "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessageRollback(bytes32,bool,bytes)"), case: :lower)
+  @received_message_rollback_event "0x" <>
+                                     Base.encode16(
+                                       ExKeccak.hash_256("ReceivedMessageRollback(bytes32,bool,bytes)"),
+                                       case: :lower
+                                     )
 
   @supported_events [
     @sent_message_event,
