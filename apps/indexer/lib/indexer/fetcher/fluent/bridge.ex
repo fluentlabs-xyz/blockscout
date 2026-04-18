@@ -276,43 +276,72 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
   end
 
   defp sent_message_event_parse(%{first_topic: @sent_message_event} = event) do
-    case decode_data(event.data, @sent_message_event_params) do
-      [value, fee, chain_id, valid_until_block_number, nonce, message_hash, _message_data] ->
-        %{
-          sender: decode_topic_address(event.second_topic),
-          target: decode_topic_address(event.third_topic),
-          value: value,
-          fee: fee,
-          chain_id: chain_id,
-          valid_until_block_number: valid_until_block_number,
-          source_block_number: valid_until_block_number,
-          nonce: nonce,
-          message_hash: bytes32_to_hash(message_hash)
-        }
+    parsed =
+      case decode_data(event.data, @sent_message_event_params) do
+        [value, fee, chain_id, valid_until_block_number, nonce, message_hash, _message_data] ->
+          %{
+            sender: decode_topic_address(event.second_topic),
+            target: decode_topic_address(event.third_topic),
+            value: value,
+            fee: fee,
+            chain_id: chain_id,
+            valid_until_block_number: valid_until_block_number,
+            source_block_number: valid_until_block_number,
+            nonce: nonce,
+            message_hash: bytes32_to_hash(message_hash)
+          }
 
-      _ ->
-        decode_sent_message_event_from_raw(event, :new)
-    end
+        _ ->
+          nil
+      end
+
+    ensure_sent_message_parsed(parsed, event, :new)
   end
 
   defp sent_message_event_parse(event) do
-    case decode_data(event.data, @legacy_sent_message_event_params) do
-      [value, chain_id, source_block_number, nonce, message_hash, _message_data] ->
-        %{
-          sender: decode_topic_address(event.second_topic),
-          target: decode_topic_address(event.third_topic),
-          value: value,
-          fee: nil,
-          chain_id: chain_id,
-          valid_until_block_number: source_block_number,
-          source_block_number: source_block_number,
-          nonce: nonce,
-          message_hash: bytes32_to_hash(message_hash)
-        }
+    parsed =
+      case decode_data(event.data, @legacy_sent_message_event_params) do
+        [value, chain_id, source_block_number, nonce, message_hash, _message_data] ->
+          %{
+            sender: decode_topic_address(event.second_topic),
+            target: decode_topic_address(event.third_topic),
+            value: value,
+            fee: nil,
+            chain_id: chain_id,
+            valid_until_block_number: source_block_number,
+            source_block_number: source_block_number,
+            nonce: nonce,
+            message_hash: bytes32_to_hash(message_hash)
+          }
 
-      _ ->
-        decode_sent_message_event_from_raw(event, :legacy)
+        _ ->
+          nil
+      end
+
+    ensure_sent_message_parsed(parsed, event, :legacy)
+  end
+
+  defp ensure_sent_message_parsed(parsed, event, signature_version) do
+    parsed =
+      if is_nil(parsed) or is_nil(parsed.message_hash) or is_nil(parsed.nonce) do
+        decoded = decode_sent_message_event_from_raw(event, signature_version)
+
+        if !is_nil(decoded.message_hash) do
+          decoded
+        else
+          parsed || decoded
+        end
+      else
+        parsed
+      end
+
+    if is_nil(parsed.message_hash) do
+      Logger.warning(
+        "Skipping Fluent SentMessage with empty message_hash. tx=#{inspect(event.transaction_hash)} block=#{inspect(event.block_number)} topic=#{inspect(event.first_topic)} data_size=#{data_size(event.data)}"
+      )
     end
+
+    parsed
   end
 
   defp decode_sent_message_event_from_raw(event, :new) do
@@ -463,6 +492,9 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
 
   defp decode_data_hex("0x" <> data_hex), do: Base.decode16(data_hex, case: :mixed)
   defp decode_data_hex(_), do: :error
+
+  defp data_size("0x" <> data_hex), do: div(byte_size(data_hex), 2)
+  defp data_size(_), do: 0
 
   defp decode_topic_address(nil), do: nil
 
