@@ -275,7 +275,19 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
     end)
   end
 
-  defp sent_message_event_parse(%{first_topic: @sent_message_event} = event) do
+  @doc false
+  @spec sent_message_event_parse(map()) :: %{
+          sender: binary() | nil,
+          target: binary() | nil,
+          value: non_neg_integer() | nil,
+          fee: non_neg_integer() | nil,
+          chain_id: non_neg_integer() | nil,
+          valid_until_block_number: non_neg_integer() | nil,
+          source_block_number: non_neg_integer() | nil,
+          nonce: non_neg_integer() | nil,
+          message_hash: binary() | nil
+        }
+  def sent_message_event_parse(%{first_topic: @sent_message_event} = event) do
     parsed =
       case decode_data(event.data, @sent_message_event_params) do
         [value, fee, chain_id, valid_until_block_number, nonce, message_hash, _message_data] ->
@@ -298,7 +310,7 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
     ensure_sent_message_parsed(parsed, event, :new)
   end
 
-  defp sent_message_event_parse(event) do
+  def sent_message_event_parse(event) do
     parsed =
       case decode_data(event.data, @legacy_sent_message_event_params) do
         [value, chain_id, source_block_number, nonce, message_hash, _message_data] ->
