@@ -13,26 +13,45 @@ defmodule BlockScoutWeb.API.V2.AddressView do
   alias Explorer.Chain.Token.Instance
 
   @api_true [api?: true]
-  @bridge_sent_message_topic_hash
-    "0x" <>
-      Base.encode16(
-        ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,uint256,bytes32,bytes)"),
-        case: :lower
-      )
-  @bridge_legacy_sent_message_topic_hash
-    "0x" <>
-      Base.encode16(
-        ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,bytes32,bytes)"),
-        case: :lower
-      )
-  @bridge_received_message_topic_hash
-    "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessage(bytes32,bool,bytes)"), case: :lower)
-  @bridge_rollback_message_topic_hash
-    "0x" <> Base.encode16(ExKeccak.hash_256("RollbackMessage(bytes32,uint256)"), case: :lower)
-  @bridge_retried_failed_message_topic_hash
-    "0x" <> Base.encode16(ExKeccak.hash_256("RetriedFailedMessage(bytes32,bool,bytes)"), case: :lower)
-  @bridge_received_message_rollback_topic_hash
-    "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessageRollback(bytes32,bool,bytes)"), case: :lower)
+  @bridge_sent_message_topic_hash "0x" <>
+                                    Base.encode16(
+                                      ExKeccak.hash_256(
+                                        "SentMessage(address,address,uint256,uint256,uint256,uint256,uint256,bytes32,bytes)"
+                                      ),
+                                      case: :lower
+                                    )
+
+  @bridge_legacy_sent_message_topic_hash "0x" <>
+                                           Base.encode16(
+                                             ExKeccak.hash_256(
+                                               "SentMessage(address,address,uint256,uint256,uint256,uint256,bytes32,bytes)"
+                                             ),
+                                             case: :lower
+                                           )
+
+  @bridge_received_message_topic_hash "0x" <>
+                                        Base.encode16(
+                                          ExKeccak.hash_256("ReceivedMessage(bytes32,bool,bytes)"),
+                                          case: :lower
+                                        )
+
+  @bridge_rollback_message_topic_hash "0x" <>
+                                        Base.encode16(
+                                          ExKeccak.hash_256("RollbackMessage(bytes32,uint256)"),
+                                          case: :lower
+                                        )
+
+  @bridge_retried_failed_message_topic_hash "0x" <>
+                                              Base.encode16(
+                                                ExKeccak.hash_256("RetriedFailedMessage(bytes32,bool,bytes)"),
+                                                case: :lower
+                                              )
+
+  @bridge_received_message_rollback_topic_hash "0x" <>
+                                                 Base.encode16(
+                                                   ExKeccak.hash_256("ReceivedMessageRollback(bytes32,bool,bytes)"),
+                                                   case: :lower
+                                                 )
 
   def render("message.json", assigns) do
     ApiView.render("message.json", assigns)
