@@ -7,7 +7,6 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
 
   import EthereumJSONRPC,
     only: [
-      integer_to_quantity: 1,
       quantity_to_integer: 1,
       timestamp_to_datetime: 1
     ]
@@ -119,15 +118,9 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
         if chunk_start <= chunk_end do
           IndexerHelper.log_blocks_chunk_handling(chunk_start, chunk_end, start_block, end_block, nil, layer)
 
-          Logger.info(
-            "Fluent bridge chunk debug context. layer=#{layer} chunk=#{chunk_start}..#{chunk_end} bridge_contract=#{inspect(bridge_contract)} rpc_urls=#{inspect(rpc_urls(json_rpc_named_arguments))} topic_hashes=#{inspect(@supported_events)}"
-          )
-
-          fetched_events = get_logs_all({chunk_start, chunk_end}, layer, bridge_contract, json_rpc_named_arguments)
+          fetched_events = get_logs_all({chunk_start, chunk_end}, bridge_contract, json_rpc_named_arguments)
 
           operations = prepare_operations(fetched_events, layer == :L1, json_rpc_named_arguments)
-
-          log_chunk_debug_summary(layer, chunk_start, chunk_end, bridge_contract, fetched_events, operations)
 
           import_operations(operations)
 
@@ -171,22 +164,9 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
     {:noreply, %{state | start_block: new_start_block, end_block: new_end_block}}
   end
 
-  @spec get_logs_all({non_neg_integer(), non_neg_integer()}, :L1 | :L2, binary(), EthereumJSONRPC.json_rpc_named_arguments()) ::
+  @spec get_logs_all({non_neg_integer(), non_neg_integer()}, binary(), EthereumJSONRPC.json_rpc_named_arguments()) ::
           [%{atom() => any()}]
-  defp get_logs_all({chunk_start, chunk_end}, layer, bridge_contract, json_rpc_named_arguments) do
-    request_filter = %{
-      fromBlock: integer_to_quantity(chunk_start),
-      toBlock: integer_to_quantity(chunk_end),
-      address: bridge_contract,
-      topics: [@supported_events]
-    }
-
-    request_payload = %{id: 0, method: "eth_getLogs", params: [request_filter]}
-
-    Logger.info(
-      "Fluent bridge RPC request. layer=#{layer} chunk=#{chunk_start}..#{chunk_end} rpc_urls=#{inspect(rpc_urls(json_rpc_named_arguments))} bridge_contract=#{inspect(bridge_contract)} request=#{inspect(request_payload)}"
-    )
-
+  defp get_logs_all({chunk_start, chunk_end}, bridge_contract, json_rpc_named_arguments) do
     case IndexerHelper.get_logs(
            chunk_start,
            chunk_end,
@@ -197,18 +177,11 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
            IndexerHelper.infinite_retries_number()
          ) do
       {:ok, result} ->
-        raw_events = if is_list(result), do: result, else: []
-        decoded_events = Logs.elixir_to_params(raw_events)
-
-        Logger.info(
-          "Fluent bridge RPC response. layer=#{layer} chunk=#{chunk_start}..#{chunk_end} raw_events=#{length(raw_events)} decoded_events=#{length(decoded_events)} topic_counts=#{inspect(topic_counts(decoded_events))} sample_events=#{inspect(sample_events(decoded_events))}"
-        )
-
-        decoded_events
+        Logs.elixir_to_params(result)
 
       {:error, reason} ->
         Logger.error(
-          "Fluent bridge RPC failed. layer=#{layer} chunk=#{chunk_start}..#{chunk_end} rpc_urls=#{inspect(rpc_urls(json_rpc_named_arguments))} bridge_contract=#{inspect(bridge_contract)} request=#{inspect(request_payload)} error=#{inspect(reason)}"
+          "Cannot fetch Fluent bridge logs for range #{chunk_start}..#{chunk_end} (bridge=#{inspect(bridge_contract)}): #{inspect(reason)}"
         )
 
         []
@@ -229,7 +202,6 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
   @spec prepare_operations([%{atom() => any()}], boolean(), EthereumJSONRPC.json_rpc_named_arguments()) ::
           [Explorer.Chain.Fluent.Bridge.to_import()]
   defp prepare_operations(events, is_l1, json_rpc_named_arguments) do
-    raw_events_count = length(events)
     supported_events = Enum.filter(events, &(&1.first_topic in @supported_events))
 
     block_to_timestamp = blocks_to_timestamps(supported_events, json_rpc_named_arguments)
@@ -304,14 +276,9 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
         end
       end)
 
-    dropped_nil_operations = Enum.count(parsed_operations, &is_nil/1)
-    dropped_empty_message_hash = Enum.count(parsed_operations, &(is_map(&1) and is_nil(&1.message_hash)))
-
     operations = Enum.reject(parsed_operations, &(is_nil(&1) or is_nil(&1.message_hash)))
 
-    Logger.info(
-      "Fluent bridge parse summary. is_l1=#{is_l1} raw_events=#{raw_events_count} supported_events=#{length(supported_events)} parsed_operations=#{length(parsed_operations)} imported_operations=#{length(operations)} dropped_nil_operations=#{dropped_nil_operations} dropped_empty_message_hash=#{dropped_empty_message_hash} topic_counts=#{inspect(topic_counts(supported_events))}"
-    )
+    log_found_events(is_l1, operations)
 
     operations
   end
@@ -615,52 +582,25 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
     end
   end
 
-  defp log_chunk_debug_summary(layer, chunk_start, chunk_end, bridge_contract, fetched_events, operations) do
-    Logger.info(
-      "Fluent bridge chunk summary. layer=#{layer} chunk=#{chunk_start}..#{chunk_end} bridge_contract=#{inspect(bridge_contract)} fetched_events=#{length(fetched_events)} imported_operations=#{length(operations)} fetched_topic_counts=#{inspect(topic_counts(fetched_events))} imported_message_hashes_sample=#{inspect(operations |> Enum.take(5) |> Enum.map(& &1.message_hash))}"
-    )
+  defp log_found_events(_is_l1, []), do: :ok
+
+  defp log_found_events(is_l1, operations) do
+    layer = if(is_l1, do: :L1, else: :L2)
+
+    sample =
+      operations
+      |> Enum.take(5)
+      |> Enum.map(fn op ->
+        %{
+          type: op.type,
+          message_hash: op.message_hash,
+          tx_hash: op.l1_transaction_hash || op.l2_transaction_hash,
+          block_number: op.l1_block_number || op.l2_block_number
+        }
+      end)
+
+    Logger.info("Fluent bridge events found. layer=#{layer} count=#{length(operations)} sample=#{inspect(sample)}")
   end
-
-  defp rpc_urls(json_rpc_named_arguments) when is_list(json_rpc_named_arguments) do
-    json_rpc_named_arguments
-    |> Keyword.get(:transport_options, [])
-    |> Keyword.get(:urls, [])
-  end
-
-  defp rpc_urls(_), do: []
-
-  defp topic_counts(events) when is_list(events) do
-    events
-    |> Enum.reduce(%{}, fn event, acc ->
-      topic = Map.get(event, :first_topic) || Map.get(event, "first_topic")
-
-      if is_binary(topic) do
-        Map.update(acc, topic, 1, &(&1 + 1))
-      else
-        acc
-      end
-    end)
-  end
-
-  defp topic_counts(_), do: %{}
-
-  defp sample_events(events) when is_list(events) do
-    events
-    |> Enum.take(5)
-    |> Enum.map(fn event ->
-      %{
-        block_number: Map.get(event, :block_number),
-        transaction_hash: Map.get(event, :transaction_hash),
-        first_topic: Map.get(event, :first_topic),
-        second_topic: Map.get(event, :second_topic),
-        third_topic: Map.get(event, :third_topic),
-        fourth_topic: Map.get(event, :fourth_topic),
-        data_size: data_size(Map.get(event, :data))
-      }
-    end)
-  end
-
-  defp sample_events(_), do: []
 
   defp extend_result(result, _key, value) when is_nil(value), do: result
   defp extend_result(result, key, value), do: Map.put(result, key, value)
