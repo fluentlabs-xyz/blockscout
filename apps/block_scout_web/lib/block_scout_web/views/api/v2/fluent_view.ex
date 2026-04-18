@@ -44,9 +44,11 @@ defmodule BlockScoutWeb.API.V2.FluentView do
             "successful_call" => item.successful_call,
             "rollback_block_number" => item.rollback_block_number,
             "value" => item.amount,
+            "fee" => item.fee,
             "sender_address_hash" => item.sender_address_hash,
             "target_address_hash" => item.target_address_hash,
             "chain_id" => item.chain_id,
+            "valid_until_block_number" => item.valid_until_block_number,
             "source_block_number" => item.source_block_number,
             "status" => operation_status(item)
           }

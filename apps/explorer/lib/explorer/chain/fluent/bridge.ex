@@ -10,7 +10,9 @@ defmodule Explorer.Chain.Fluent.Bridge do
     sender_address_hash
     target_address_hash
     amount
+    fee
     chain_id
+    valid_until_block_number
     source_block_number
     l1_transaction_hash
     l1_block_number
@@ -34,7 +36,9 @@ defmodule Explorer.Chain.Fluent.Bridge do
           sender_address_hash: binary() | nil,
           target_address_hash: binary() | nil,
           amount: Decimal.t() | non_neg_integer() | nil,
+          fee: Decimal.t() | non_neg_integer() | nil,
           chain_id: Decimal.t() | non_neg_integer() | nil,
+          valid_until_block_number: non_neg_integer() | nil,
           source_block_number: non_neg_integer() | nil,
           l1_transaction_hash: binary() | nil,
           l1_block_number: non_neg_integer() | nil,
@@ -42,7 +46,7 @@ defmodule Explorer.Chain.Fluent.Bridge do
           l2_transaction_hash: binary() | nil,
           l2_block_number: non_neg_integer() | nil,
           l2_timestamp: DateTime.t() | nil,
-          completion_kind: :received_message | :rollback_message | :received_message_rollback | nil,
+          completion_kind: :received_message | :rollback_message | :retried_failed_message | :received_message_rollback | nil,
           successful_call: boolean() | nil,
           rollback_block_number: non_neg_integer() | nil,
           return_data: binary() | nil
@@ -57,7 +61,9 @@ defmodule Explorer.Chain.Fluent.Bridge do
     field(:sender_address_hash, Hash.Address)
     field(:target_address_hash, Hash.Address)
     field(:amount, :decimal)
+    field(:fee, :decimal)
     field(:chain_id, :decimal)
+    field(:valid_until_block_number, :integer)
     field(:source_block_number, :integer)
 
     field(:l1_transaction_hash, Hash.Full)
@@ -68,7 +74,9 @@ defmodule Explorer.Chain.Fluent.Bridge do
     field(:l2_block_number, :integer)
     field(:l2_timestamp, :utc_datetime_usec)
 
-    field(:completion_kind, Ecto.Enum, values: [:received_message, :rollback_message, :received_message_rollback])
+    field(:completion_kind, Ecto.Enum,
+      values: [:received_message, :rollback_message, :retried_failed_message, :received_message_rollback]
+    )
     field(:successful_call, :boolean)
     field(:rollback_block_number, :integer)
     field(:return_data, :binary)

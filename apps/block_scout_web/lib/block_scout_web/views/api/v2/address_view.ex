@@ -16,6 +16,12 @@ defmodule BlockScoutWeb.API.V2.AddressView do
   @bridge_sent_message_topic_hash
     "0x" <>
       Base.encode16(
+        ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,uint256,bytes32,bytes)"),
+        case: :lower
+      )
+  @bridge_legacy_sent_message_topic_hash
+    "0x" <>
+      Base.encode16(
         ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,bytes32,bytes)"),
         case: :lower
       )
@@ -23,6 +29,8 @@ defmodule BlockScoutWeb.API.V2.AddressView do
     "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessage(bytes32,bool,bytes)"), case: :lower)
   @bridge_rollback_message_topic_hash
     "0x" <> Base.encode16(ExKeccak.hash_256("RollbackMessage(bytes32,uint256)"), case: :lower)
+  @bridge_retried_failed_message_topic_hash
+    "0x" <> Base.encode16(ExKeccak.hash_256("RetriedFailedMessage(bytes32,bool,bytes)"), case: :lower)
   @bridge_received_message_rollback_topic_hash
     "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessageRollback(bytes32,bool,bytes)"), case: :lower)
 
@@ -234,7 +242,9 @@ defmodule BlockScoutWeb.API.V2.AddressView do
       "sender_address_hash" => nil,
       "target_address_hash" => nil,
       "value" => nil,
+      "fee" => nil,
       "chain_id" => nil,
+      "valid_until_block_number" => nil,
       "source_block_number" => nil,
       "nonce" => nil,
       "message_hash" => nil,
@@ -252,7 +262,9 @@ defmodule BlockScoutWeb.API.V2.AddressView do
           "sender_address_hash" => decode_topic_address(log.second_topic),
           "target_address_hash" => decode_topic_address(log.third_topic),
           "value" => sent_message.value,
+          "fee" => sent_message.fee,
           "chain_id" => sent_message.chain_id,
+          "valid_until_block_number" => sent_message.valid_until_block_number,
           "source_block_number" => sent_message.source_block_number,
           "nonce" => sent_message.nonce,
           "message_hash" => sent_message.message_hash,
@@ -276,6 +288,15 @@ defmodule BlockScoutWeb.API.V2.AddressView do
           "rollback_block_number" => rollback_message.rollback_block_number
         })
 
+      "retried_failed_message" ->
+        retried_failed_message = decode_bridge_received_message(log.data)
+
+        Map.merge(base, %{
+          "message_hash" => retried_failed_message.message_hash,
+          "successful_call" => retried_failed_message.successful_call,
+          "return_data" => retried_failed_message.return_data
+        })
+
       "received_message_rollback" ->
         received_message_rollback = decode_bridge_received_message(log.data)
 
@@ -291,14 +312,17 @@ defmodule BlockScoutWeb.API.V2.AddressView do
   end
 
   defp bridge_event(@bridge_sent_message_topic_hash), do: "sent_message"
+  defp bridge_event(@bridge_legacy_sent_message_topic_hash), do: "sent_message"
   defp bridge_event(@bridge_received_message_topic_hash), do: "received_message"
   defp bridge_event(@bridge_rollback_message_topic_hash), do: "rollback_message"
+  defp bridge_event(@bridge_retried_failed_message_topic_hash), do: "retried_failed_message"
   defp bridge_event(@bridge_received_message_rollback_topic_hash), do: "received_message_rollback"
   defp bridge_event(_), do: nil
 
   defp bridge_operation("sent_message"), do: "deposit"
   defp bridge_operation("received_message"), do: "withdraw"
   defp bridge_operation("rollback_message"), do: "withdraw"
+  defp bridge_operation("retried_failed_message"), do: "withdraw"
   defp bridge_operation("received_message_rollback"), do: "withdraw"
   defp bridge_operation(_), do: nil
 
@@ -388,20 +412,39 @@ defmodule BlockScoutWeb.API.V2.AddressView do
   end
 
   defp decode_bridge_sent_message(%Chain.Data{bytes: bytes}) when is_binary(bytes) do
-    with true <- byte_size(bytes) >= 192 do
-      %{
-        value: decode_word(bytes, 0),
-        chain_id: decode_word(bytes, 32),
-        source_block_number: decode_word(bytes, 64),
-        nonce: decode_word(bytes, 96),
-        message_hash: decode_word_as_hash(bytes, 128),
-        message_data: decode_dynamic_bytes_as_hex(bytes, 160)
-      }
-    else
-      _ ->
+    cond do
+      byte_size(bytes) >= 224 ->
+        %{
+          value: decode_word(bytes, 0),
+          fee: decode_word(bytes, 32),
+          chain_id: decode_word(bytes, 64),
+          valid_until_block_number: decode_word(bytes, 96),
+          source_block_number: decode_word(bytes, 96),
+          nonce: decode_word(bytes, 128),
+          message_hash: decode_word_as_hash(bytes, 160),
+          message_data: decode_dynamic_bytes_as_hex(bytes, 192)
+        }
+
+      byte_size(bytes) >= 192 ->
+        source_block_number = decode_word(bytes, 64)
+
+        %{
+          value: decode_word(bytes, 0),
+          fee: nil,
+          chain_id: decode_word(bytes, 32),
+          valid_until_block_number: source_block_number,
+          source_block_number: source_block_number,
+          nonce: decode_word(bytes, 96),
+          message_hash: decode_word_as_hash(bytes, 128),
+          message_data: decode_dynamic_bytes_as_hex(bytes, 160)
+        }
+
+      true ->
         %{
           value: nil,
+          fee: nil,
           chain_id: nil,
+          valid_until_block_number: nil,
           source_block_number: nil,
           nonce: nil,
           message_hash: nil,
@@ -411,7 +454,16 @@ defmodule BlockScoutWeb.API.V2.AddressView do
   end
 
   defp decode_bridge_sent_message(_),
-    do: %{value: nil, chain_id: nil, source_block_number: nil, nonce: nil, message_hash: nil, message_data: nil}
+    do: %{
+      value: nil,
+      fee: nil,
+      chain_id: nil,
+      valid_until_block_number: nil,
+      source_block_number: nil,
+      nonce: nil,
+      message_hash: nil,
+      message_data: nil
+    }
 
   defp decode_bridge_received_message(%Chain.Data{bytes: bytes}) when is_binary(bytes) do
     with true <- byte_size(bytes) >= 96 do

@@ -19,20 +19,48 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
   alias Indexer.Fetcher.Fluent.BridgeL1
   alias Indexer.Helper, as: IndexerHelper
 
-  @sent_message_event "0x7b397c6ce16a73396390bf270a2021417ca4d97f44e82cdce3f5eb750fd34134"
+  @sent_message_event
+    "0x" <>
+      Base.encode16(
+        ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,uint256,bytes32,bytes)"),
+        case: :lower
+      )
+
+  @legacy_sent_message_event
+    "0x" <>
+      Base.encode16(
+        ExKeccak.hash_256("SentMessage(address,address,uint256,uint256,uint256,uint256,bytes32,bytes)"),
+        case: :lower
+      )
+
   @received_message_event "0xc5797c3a3c0e6c245576d05b8c3929881b44e1a21fdb4f1b118ede3c009683c5"
   @rollback_message_event "0x" <> Base.encode16(ExKeccak.hash_256("RollbackMessage(bytes32,uint256)"), case: :lower)
+  @retried_failed_message_event
+    "0x" <> Base.encode16(ExKeccak.hash_256("RetriedFailedMessage(bytes32,bool,bytes)"), case: :lower)
+
   @received_message_rollback_event
     "0x" <> Base.encode16(ExKeccak.hash_256("ReceivedMessageRollback(bytes32,bool,bytes)"), case: :lower)
 
   @supported_events [
     @sent_message_event,
+    @legacy_sent_message_event,
     @received_message_event,
     @rollback_message_event,
+    @retried_failed_message_event,
     @received_message_rollback_event
   ]
 
-  @sent_message_event_params [{:uint, 256}, {:uint, 256}, {:uint, 256}, {:uint, 256}, {:bytes, 32}, :bytes]
+  @sent_message_event_params [
+    {:uint, 256},
+    {:uint, 256},
+    {:uint, 256},
+    {:uint, 256},
+    {:uint, 256},
+    {:bytes, 32},
+    :bytes
+  ]
+
+  @legacy_sent_message_event_params [{:uint, 256}, {:uint, 256}, {:uint, 256}, {:uint, 256}, {:bytes, 32}, :bytes]
 
   @spec loop(module(), %{
           block_check_interval: non_neg_integer(),
@@ -177,7 +205,7 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
         |> put_layer_fields(is_l1, event.transaction_hash, block_number, block_timestamp)
 
       case topic do
-        @sent_message_event ->
+        topic when topic in [@sent_message_event, @legacy_sent_message_event] ->
           sent_message = sent_message_event_parse(event)
 
           base
@@ -186,7 +214,9 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
           |> Map.put(:sender_address_hash, sent_message.sender)
           |> Map.put(:target_address_hash, sent_message.target)
           |> Map.put(:amount, sent_message.value)
+          |> Map.put(:fee, sent_message.fee)
           |> Map.put(:chain_id, sent_message.chain_id)
+          |> Map.put(:valid_until_block_number, sent_message.valid_until_block_number)
           |> Map.put(:source_block_number, sent_message.source_block_number)
 
         @received_message_event ->
@@ -205,6 +235,15 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
           |> Map.put(:message_hash, rollback_message.message_hash)
           |> Map.put(:completion_kind, :rollback_message)
           |> extend_result(:rollback_block_number, rollback_message.rollback_block_number)
+
+        @retried_failed_message_event ->
+          retried_failed_message = decode_bridge_received_message(event.data)
+
+          base
+          |> Map.put(:message_hash, retried_failed_message.message_hash)
+          |> Map.put(:completion_kind, :retried_failed_message)
+          |> extend_result(:successful_call, retried_failed_message.successful_call)
+          |> extend_result(:return_data, retried_failed_message.return_data)
 
         @received_message_rollback_event ->
           received_message_rollback = decode_bridge_received_message(event.data)
@@ -234,15 +273,34 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
     end)
   end
 
-  defp sent_message_event_parse(event) do
-    [value, chain_id, source_block_number, nonce, message_hash, _message_data] =
+  defp sent_message_event_parse(%{first_topic: @sent_message_event} = event) do
+    [value, fee, chain_id, valid_until_block_number, nonce, message_hash, _message_data] =
       decode_data(event.data, @sent_message_event_params)
 
     %{
       sender: decode_topic_address(event.second_topic),
       target: decode_topic_address(event.third_topic),
       value: value,
+      fee: fee,
       chain_id: chain_id,
+      valid_until_block_number: valid_until_block_number,
+      source_block_number: valid_until_block_number,
+      nonce: nonce,
+      message_hash: bytes32_to_hash(message_hash)
+    }
+  end
+
+  defp sent_message_event_parse(event) do
+    [value, chain_id, source_block_number, nonce, message_hash, _message_data] =
+      decode_data(event.data, @legacy_sent_message_event_params)
+
+    %{
+      sender: decode_topic_address(event.second_topic),
+      target: decode_topic_address(event.third_topic),
+      value: value,
+      fee: nil,
+      chain_id: chain_id,
+      valid_until_block_number: source_block_number,
       source_block_number: source_block_number,
       nonce: nonce,
       message_hash: bytes32_to_hash(message_hash)
@@ -276,8 +334,8 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
     end
   end
 
-  defp operation_type(@sent_message_event, true), do: :deposit
-  defp operation_type(@sent_message_event, false), do: :withdrawal
+  defp operation_type(topic, true) when topic in [@sent_message_event, @legacy_sent_message_event], do: :deposit
+  defp operation_type(topic, false) when topic in [@sent_message_event, @legacy_sent_message_event], do: :withdrawal
   defp operation_type(_event, true), do: :withdrawal
   defp operation_type(_event, false), do: :deposit
 
