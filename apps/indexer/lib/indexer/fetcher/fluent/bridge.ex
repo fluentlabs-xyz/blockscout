@@ -592,10 +592,10 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
       |> Enum.take(5)
       |> Enum.map(fn op ->
         %{
-          type: op.type,
-          message_hash: op.message_hash,
-          tx_hash: op.l1_transaction_hash || op.l2_transaction_hash,
-          block_number: op.l1_block_number || op.l2_block_number
+          type: Map.get(op, :type),
+          message_hash: Map.get(op, :message_hash),
+          tx_hash: Map.get(op, :l1_transaction_hash) || Map.get(op, :l2_transaction_hash),
+          block_number: Map.get(op, :l1_block_number) || Map.get(op, :l2_block_number)
         }
       end)
 
