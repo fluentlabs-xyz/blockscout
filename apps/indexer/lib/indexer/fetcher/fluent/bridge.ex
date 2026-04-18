@@ -276,36 +276,142 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
   end
 
   defp sent_message_event_parse(%{first_topic: @sent_message_event} = event) do
-    [value, fee, chain_id, valid_until_block_number, nonce, message_hash, _message_data] =
-      decode_data(event.data, @sent_message_event_params)
+    case decode_data(event.data, @sent_message_event_params) do
+      [value, fee, chain_id, valid_until_block_number, nonce, message_hash, _message_data] ->
+        %{
+          sender: decode_topic_address(event.second_topic),
+          target: decode_topic_address(event.third_topic),
+          value: value,
+          fee: fee,
+          chain_id: chain_id,
+          valid_until_block_number: valid_until_block_number,
+          source_block_number: valid_until_block_number,
+          nonce: nonce,
+          message_hash: bytes32_to_hash(message_hash)
+        }
 
-    %{
-      sender: decode_topic_address(event.second_topic),
-      target: decode_topic_address(event.third_topic),
-      value: value,
-      fee: fee,
-      chain_id: chain_id,
-      valid_until_block_number: valid_until_block_number,
-      source_block_number: valid_until_block_number,
-      nonce: nonce,
-      message_hash: bytes32_to_hash(message_hash)
-    }
+      _ ->
+        decode_sent_message_event_from_raw(event, :new)
+    end
   end
 
   defp sent_message_event_parse(event) do
-    [value, chain_id, source_block_number, nonce, message_hash, _message_data] =
-      decode_data(event.data, @legacy_sent_message_event_params)
+    case decode_data(event.data, @legacy_sent_message_event_params) do
+      [value, chain_id, source_block_number, nonce, message_hash, _message_data] ->
+        %{
+          sender: decode_topic_address(event.second_topic),
+          target: decode_topic_address(event.third_topic),
+          value: value,
+          fee: nil,
+          chain_id: chain_id,
+          valid_until_block_number: source_block_number,
+          source_block_number: source_block_number,
+          nonce: nonce,
+          message_hash: bytes32_to_hash(message_hash)
+        }
 
+      _ ->
+        decode_sent_message_event_from_raw(event, :legacy)
+    end
+  end
+
+  defp decode_sent_message_event_from_raw(event, :new) do
+    with {:ok, bytes} <- decode_data_hex(event.data) do
+      cond do
+        # SentMessage(..., value, fee, chainId, validUntilBlockNumber, nonce, messageHash, bytes)
+        byte_size(bytes) >= 224 ->
+          valid_until_block_number = decode_word(bytes, 96)
+
+          %{
+            sender: decode_topic_address(event.second_topic),
+            target: decode_topic_address(event.third_topic),
+            value: decode_word(bytes, 0),
+            fee: decode_word(bytes, 32),
+            chain_id: decode_word(bytes, 64),
+            valid_until_block_number: valid_until_block_number,
+            source_block_number: valid_until_block_number,
+            nonce: decode_word(bytes, 128),
+            message_hash: decode_word_as_hash(bytes, 160)
+          }
+
+        # Same event, but with indexed messageHash (topic4) and data without bytes32 field.
+        byte_size(bytes) >= 192 ->
+          valid_until_block_number = decode_word(bytes, 96)
+
+          %{
+            sender: decode_topic_address(event.second_topic),
+            target: decode_topic_address(event.third_topic),
+            value: decode_word(bytes, 0),
+            fee: decode_word(bytes, 32),
+            chain_id: decode_word(bytes, 64),
+            valid_until_block_number: valid_until_block_number,
+            source_block_number: valid_until_block_number,
+            nonce: decode_word(bytes, 128),
+            message_hash: decode_topic_hash(event.fourth_topic)
+          }
+
+        true ->
+          empty_sent_message_event(event)
+      end
+    else
+      _ -> empty_sent_message_event(event)
+    end
+  end
+
+  defp decode_sent_message_event_from_raw(event, :legacy) do
+    with {:ok, bytes} <- decode_data_hex(event.data) do
+      cond do
+        # Legacy SentMessage(..., value, chainId, sourceBlockNumber, nonce, messageHash, bytes)
+        byte_size(bytes) >= 192 ->
+          source_block_number = decode_word(bytes, 64)
+
+          %{
+            sender: decode_topic_address(event.second_topic),
+            target: decode_topic_address(event.third_topic),
+            value: decode_word(bytes, 0),
+            fee: nil,
+            chain_id: decode_word(bytes, 32),
+            valid_until_block_number: source_block_number,
+            source_block_number: source_block_number,
+            nonce: decode_word(bytes, 96),
+            message_hash: decode_word_as_hash(bytes, 128)
+          }
+
+        # Legacy variant with indexed messageHash (topic4).
+        byte_size(bytes) >= 160 ->
+          source_block_number = decode_word(bytes, 64)
+
+          %{
+            sender: decode_topic_address(event.second_topic),
+            target: decode_topic_address(event.third_topic),
+            value: decode_word(bytes, 0),
+            fee: nil,
+            chain_id: decode_word(bytes, 32),
+            valid_until_block_number: source_block_number,
+            source_block_number: source_block_number,
+            nonce: decode_word(bytes, 96),
+            message_hash: decode_topic_hash(event.fourth_topic)
+          }
+
+        true ->
+          empty_sent_message_event(event)
+      end
+    else
+      _ -> empty_sent_message_event(event)
+    end
+  end
+
+  defp empty_sent_message_event(event) do
     %{
       sender: decode_topic_address(event.second_topic),
       target: decode_topic_address(event.third_topic),
-      value: value,
+      value: nil,
       fee: nil,
-      chain_id: chain_id,
-      valid_until_block_number: source_block_number,
-      source_block_number: source_block_number,
-      nonce: nonce,
-      message_hash: bytes32_to_hash(message_hash)
+      chain_id: nil,
+      valid_until_block_number: nil,
+      source_block_number: nil,
+      nonce: nil,
+      message_hash: nil
     }
   end
 
@@ -365,6 +471,14 @@ defmodule Indexer.Fetcher.Fluent.Bridge do
   end
 
   defp decode_topic_address(_), do: nil
+
+  defp decode_topic_hash(nil), do: nil
+
+  defp decode_topic_hash("0x" <> full_hash) when byte_size(full_hash) == 64 do
+    "0x" <> String.downcase(full_hash)
+  end
+
+  defp decode_topic_hash(_), do: nil
 
   defp bytes32_to_hash(bytes) when is_binary(bytes) and byte_size(bytes) == 32 do
     "0x" <> Base.encode16(bytes, case: :lower)
