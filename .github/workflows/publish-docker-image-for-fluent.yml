@@ -56,5 +56,6 @@ jobs:
           build-args: |
             BLOCKSCOUT_VERSION=v10.2.4.+commit.${{ env.SHORT_SHA }}
             RELEASE_VERSION=10.2.4
+            BRIDGED_TOKENS_ENABLED=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
