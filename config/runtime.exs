@@ -901,6 +901,7 @@ config :explorer, Explorer.Migrator.DeleteZeroValueInternalTransactions,
     ConfigHelper.parse_time_env_var("MIGRATION_DELETE_ZERO_VALUE_INTERNAL_TRANSACTIONS_CHECK_INTERVAL", "1m")
 
 config :explorer, Explorer.Chain.BridgedToken,
+  enabled: ConfigHelper.parse_bool_env_var("BRIDGED_TOKENS_ENABLED"),
   eth_omni_bridge_mediator: System.get_env("BRIDGED_TOKENS_ETH_OMNI_BRIDGE_MEDIATOR"),
   bsc_omni_bridge_mediator: System.get_env("BRIDGED_TOKENS_BSC_OMNI_BRIDGE_MEDIATOR"),
   poa_omni_bridge_mediator: System.get_env("BRIDGED_TOKENS_POA_OMNI_BRIDGE_MEDIATOR"),
