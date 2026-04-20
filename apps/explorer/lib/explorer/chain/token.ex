@@ -163,7 +163,10 @@ defmodule Explorer.Chain.Token do
 
   @doc false
   def changeset(%Token{} = token, params \\ %{}) do
-    additional_attrs = if BridgedToken.enabled?(), do: [:bridged], else: []
+    additional_attrs =
+      if BridgedToken.enabled?() and :bridged in __MODULE__.__schema__(:fields),
+        do: [:bridged],
+        else: []
 
     token
     |> cast(params, @required_attrs ++ @optional_attrs ++ additional_attrs)

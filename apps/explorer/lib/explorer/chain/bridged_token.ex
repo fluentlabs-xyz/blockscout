@@ -138,7 +138,9 @@ defmodule Explorer.Chain.BridgedToken do
   end
 
   def enabled? do
-    Application.get_env(:explorer, __MODULE__)[:enabled]
+    config_enabled? = Application.get_env(:explorer, __MODULE__)[:enabled]
+
+    config_enabled? and :bridged in Token.__schema__(:fields)
   end
 
   @doc """
