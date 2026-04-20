@@ -904,6 +904,8 @@ config :explorer, Explorer.Chain.BridgedToken,
   eth_omni_bridge_mediator: System.get_env("BRIDGED_TOKENS_ETH_OMNI_BRIDGE_MEDIATOR"),
   bsc_omni_bridge_mediator: System.get_env("BRIDGED_TOKENS_BSC_OMNI_BRIDGE_MEDIATOR"),
   poa_omni_bridge_mediator: System.get_env("BRIDGED_TOKENS_POA_OMNI_BRIDGE_MEDIATOR"),
+  token_deployer: System.get_env("BRIDGED_TOKENS_TOKEN_DEPLOYER_ADDRESS"),
+  token_deployer_source_chain_id: System.get_env("BRIDGED_TOKENS_TOKEN_DEPLOYER_SOURCE_CHAIN_ID"),
   amb_bridge_mediators: System.get_env("BRIDGED_TOKENS_AMB_BRIDGE_MEDIATORS"),
   foreign_json_rpc: System.get_env("BRIDGED_TOKENS_FOREIGN_JSON_RPC", "")
 

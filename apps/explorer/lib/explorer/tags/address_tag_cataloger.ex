@@ -149,7 +149,8 @@ defmodule Explorer.Tags.AddressTag.Cataloger do
       [
         "BRIDGED_TOKENS_ETH_OMNI_BRIDGE_MEDIATOR",
         "BRIDGED_TOKENS_BSC_OMNI_BRIDGE_MEDIATOR",
-        "BRIDGED_TOKENS_POA_OMNI_BRIDGE_MEDIATOR"
+        "BRIDGED_TOKENS_POA_OMNI_BRIDGE_MEDIATOR",
+        "BRIDGED_TOKENS_TOKEN_DEPLOYER_ADDRESS"
       ],
       "omni bridge"
     )
