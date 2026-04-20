@@ -24,6 +24,7 @@ defmodule Explorer.Chain.BridgedToken do
     BridgedToken,
     Hash,
     InternalTransaction,
+    Log,
     Search,
     Token,
     Transaction
@@ -46,6 +47,7 @@ defmodule Explorer.Chain.BridgedToken do
   @token0_signature "0x0dfe1681"
   # keccak 256 from token1()
   @token1_signature "0xd21220a7"
+  @token_deployed_signature "0xf9a44e6db3fb6e0eb31c4013bda8c662fecef1768dd2412270cc8f8821cbccf3"
 
   @derive {Poison.Encoder,
            except: [
@@ -125,10 +127,14 @@ defmodule Explorer.Chain.BridgedToken do
     eth_omni_bridge_mediator = config[:eth_omni_bridge_mediator]
     bsc_omni_bridge_mediator = config[:bsc_omni_bridge_mediator]
     poa_omni_bridge_mediator = config[:poa_omni_bridge_mediator]
+    token_deployer = config[:token_deployer]
+    token_deployer_source_chain_id = config[:token_deployer_source_chain_id]
 
     (eth_omni_bridge_mediator && eth_omni_bridge_mediator !== "") ||
       (bsc_omni_bridge_mediator && bsc_omni_bridge_mediator !== "") ||
-      (poa_omni_bridge_mediator && poa_omni_bridge_mediator !== "")
+      (poa_omni_bridge_mediator && poa_omni_bridge_mediator !== "") ||
+      (token_deployer && token_deployer !== "" && token_deployer_source_chain_id &&
+         token_deployer_source_chain_id !== "")
   end
 
   def enabled? do
@@ -216,52 +222,132 @@ defmodule Explorer.Chain.BridgedToken do
   """
   def fetch_omni_bridged_tokens_metadata(token_addresses) do
     Enum.each(token_addresses, fn token_address_hash ->
-      created_from_internal_transaction_success_query =
-        Address.creation_internal_transaction_query(token_address_hash)
+      if !try_set_token_deployed_bridged_status(token_address_hash) do
+        created_from_internal_transaction_success_query =
+          Address.creation_internal_transaction_query(token_address_hash)
 
-      created_from_internal_transaction_success =
-        created_from_internal_transaction_success_query
-        |> Repo.one()
+        created_from_internal_transaction_success =
+          created_from_internal_transaction_success_query
+          |> Repo.one()
 
-      created_from_transaction_query =
-        from(
-          t in Transaction,
-          where: t.created_contract_address_hash == ^token_address_hash
-        )
+        created_from_transaction_query =
+          from(
+            t in Transaction,
+            where: t.created_contract_address_hash == ^token_address_hash
+          )
 
-      created_from_transaction =
-        created_from_transaction_query
-        |> Repo.all()
-        |> Enum.count() > 0
+        created_from_transaction =
+          created_from_transaction_query
+          |> Repo.all()
+          |> Enum.count() > 0
 
-      created_from_internal_transaction_query =
-        from(
-          it in InternalTransaction,
-          where: it.created_contract_address_hash == ^token_address_hash
-        )
+        created_from_internal_transaction_query =
+          from(
+            it in InternalTransaction,
+            where: it.created_contract_address_hash == ^token_address_hash
+          )
 
-      created_from_internal_transaction =
-        created_from_internal_transaction_query
-        |> Repo.all()
-        |> Enum.count() > 0
+        created_from_internal_transaction =
+          created_from_internal_transaction_query
+          |> Repo.all()
+          |> Enum.count() > 0
 
-      cond do
-        created_from_transaction ->
-          set_token_bridged_status(token_address_hash, false)
+        cond do
+          created_from_transaction ->
+            set_token_bridged_status(token_address_hash, false)
 
-        created_from_internal_transaction && !created_from_internal_transaction_success ->
-          set_token_bridged_status(token_address_hash, false)
+          created_from_internal_transaction && !created_from_internal_transaction_success ->
+            set_token_bridged_status(token_address_hash, false)
 
-        created_from_internal_transaction && created_from_internal_transaction_success ->
-          proceed_with_set_omni_status(token_address_hash, created_from_internal_transaction_success)
+          created_from_internal_transaction && created_from_internal_transaction_success ->
+            proceed_with_set_omni_status(token_address_hash, created_from_internal_transaction_success)
 
-        true ->
-          :ok
+          true ->
+            :ok
+        end
       end
     end)
 
     :ok
   end
+
+  defp try_set_token_deployed_bridged_status(token_address_hash) do
+    with {:ok, token_deployer_hash} <- token_deployer_hash(),
+         {:ok, source_chain_id} <- token_deployer_source_chain_id(),
+         pegged_token_topic <- address_hash_to_topic(token_address_hash),
+         %{second_topic: second_topic} <- token_deployed_log(token_deployer_hash, pegged_token_topic),
+         {:ok, foreign_token_address_hash} <- topic_to_address_hash(second_topic) do
+      insert_bridged_token_metadata(token_address_hash, %{
+        foreign_chain_id: source_chain_id,
+        foreign_token_address_hash: foreign_token_address_hash,
+        custom_metadata: nil,
+        custom_cap: nil,
+        lp_token: nil,
+        type: "omni"
+      })
+
+      set_token_bridged_status(token_address_hash, true)
+
+      true
+    else
+      _ ->
+        false
+    end
+  end
+
+  defp token_deployed_log(token_deployer_hash, pegged_token_topic) do
+    from(log in Log,
+      where:
+        log.address_hash == ^token_deployer_hash and
+          log.first_topic == ^@token_deployed_signature and
+          log.third_topic == ^pegged_token_topic,
+      order_by: [desc: log.block_number, desc: log.index],
+      limit: 1,
+      select: %{second_topic: log.second_topic}
+    )
+    |> Repo.one()
+  end
+
+  defp token_deployer_hash do
+    token_deployer = Application.get_env(:explorer, __MODULE__)[:token_deployer]
+
+    if token_deployer && token_deployer !== "" do
+      Chain.string_to_address_hash(token_deployer)
+    else
+      :error
+    end
+  end
+
+  defp token_deployer_source_chain_id do
+    token_deployer_source_chain_id = Application.get_env(:explorer, __MODULE__)[:token_deployer_source_chain_id]
+
+    case token_deployer_source_chain_id && String.downcase(String.trim(token_deployer_source_chain_id)) do
+      "mainnet" ->
+        {:ok, 1}
+
+      "sepolia" ->
+        {:ok, 11_155_111}
+
+      value when is_binary(value) ->
+        case Integer.parse(value) do
+          {source_chain_id, ""} -> {:ok, source_chain_id}
+          _ -> :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp address_hash_to_topic(%Hash{bytes: bytes}) do
+    "0x" <> Base.encode16(<<0::size(96), bytes::binary>>, case: :lower)
+  end
+
+  defp topic_to_address_hash(%Hash{bytes: <<_::size(96), address_hash::binary-size(20)>>}) do
+    {:ok, %Hash{byte_count: 20, bytes: address_hash}}
+  end
+
+  defp topic_to_address_hash(_), do: :error
 
   defp proceed_with_set_omni_status(token_address_hash, created_from_internal_transaction_success) do
     {:ok, eth_omni_status} =
