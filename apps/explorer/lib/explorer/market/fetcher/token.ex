@@ -7,6 +7,7 @@ defmodule Explorer.Market.Fetcher.Token do
   require Logger
 
   alias Explorer.Chain
+  alias Explorer.Chain.BridgedToken
   alias Explorer.Chain.Hash.Address
   alias Explorer.Chain.Import.Runner.Tokens
   alias Explorer.Market.Source
@@ -60,6 +61,8 @@ defmodule Explorer.Market.Fetcher.Token do
       ) do
     case source.fetch_tokens(source_state, max_batch_size) do
       {:ok, source_state, fetch_finished?, tokens_data} ->
+        tokens_data = maybe_remap_with_foreign_bridged_addresses(tokens_data)
+
         case update_tokens(tokens_data) do
           {:ok, _imported} ->
             enqueue_to_multichain(tokens_data)
@@ -144,6 +147,48 @@ defmodule Explorer.Market.Fetcher.Token do
         fields_to_update: Tokens.market_data_fields_to_update()
       }
     })
+  end
+
+  @spec maybe_remap_with_foreign_bridged_addresses([
+          %{
+            :contract_address_hash => Address.t(),
+            optional(any()) => any()
+          }
+        ]) ::
+          [
+            %{
+              :contract_address_hash => Address.t(),
+              optional(any()) => any()
+            }
+          ]
+  defp maybe_remap_with_foreign_bridged_addresses(tokens_data) do
+    if config(:match_by_foreign_bridged_address?) do
+      foreign_token_contract_address_hashes =
+        tokens_data
+        |> Enum.map(& &1.contract_address_hash)
+        |> Enum.uniq()
+
+      mapped_home_token_hashes =
+        BridgedToken.home_token_hashes_by_foreign_token_hashes(
+          foreign_token_contract_address_hashes,
+          config(:foreign_bridged_chain_id)
+        )
+
+      tokens_data
+      |> Enum.reduce([], fn token, acc ->
+        case mapped_home_token_hashes[token.contract_address_hash] do
+          nil ->
+            acc
+
+          home_token_contract_address_hash ->
+            [Map.put(token, :contract_address_hash, home_token_contract_address_hash) | acc]
+        end
+      end)
+      |> Enum.reverse()
+      |> Enum.uniq_by(& &1.contract_address_hash)
+    else
+      tokens_data
+    end
   end
 
   defp config(key) do
