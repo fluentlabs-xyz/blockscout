@@ -4,7 +4,7 @@ defmodule Explorer.Market.Fetcher.TokenTest do
   import Mox
 
   alias Plug.Conn
-  alias Explorer.Chain.Token
+  alias Explorer.Chain.{BridgedToken, Token}
   alias Explorer.Market.Fetcher.Token, as: TokenFetcher
 
   @moduletag :capture_log
@@ -18,6 +18,7 @@ defmodule Explorer.Market.Fetcher.TokenTest do
       source_configuration = Application.get_env(:explorer, Explorer.Market.Source)
       fetcher_configuration = Application.get_env(:explorer, Explorer.Market.Fetcher.Token)
       coin_gecko_configuration = Application.get_env(:explorer, Explorer.Market.Source.CoinGecko)
+      bridged_token_configuration = Application.get_env(:explorer, Explorer.Chain.BridgedToken)
 
       Application.put_env(:explorer, Explorer.Market.Source, tokens_source: Explorer.Market.Source.CoinGecko)
 
@@ -25,8 +26,12 @@ defmodule Explorer.Market.Fetcher.TokenTest do
         enabled: true,
         interval: 0,
         refetch_interval: 10000,
-        max_batch_size: 10
+        max_batch_size: 10,
+        match_by_foreign_bridged_address?: false,
+        foreign_bridged_chain_id: 1
       )
+
+      Application.put_env(:explorer, Explorer.Chain.BridgedToken, enabled: true)
 
       Application.put_env(:explorer, Explorer.Market.Source.CoinGecko,
         platform: "ethereum",
@@ -40,6 +45,7 @@ defmodule Explorer.Market.Fetcher.TokenTest do
         Application.put_env(:explorer, Explorer.Market.Source, source_configuration)
         Application.put_env(:explorer, Explorer.Market.Fetcher.Token, fetcher_configuration)
         Application.put_env(:explorer, Explorer.Market.Source.CoinGecko, coin_gecko_configuration)
+        Application.put_env(:explorer, Explorer.Chain.BridgedToken, bridged_token_configuration)
         Application.put_env(:tesla, :adapter, Explorer.Mock.TeslaAdapter)
       end)
 
@@ -222,6 +228,82 @@ defmodule Explorer.Market.Fetcher.TokenTest do
 
       Repo.all(Token)
       |> Enum.each(fn %{fiat_value: fiat_value} -> assert is_nil(fiat_value) end)
+    end
+
+    test "success fetch with matching by foreign bridged addresses", %{
+      bypass: bypass,
+      tokens: [home_token_1, home_token_2 | _]
+    } do
+      Application.put_env(
+        :explorer,
+        Explorer.Market.Fetcher.Token,
+        Application.get_env(:explorer, Explorer.Market.Fetcher.Token)
+        |> Keyword.merge(match_by_foreign_bridged_address?: true, foreign_bridged_chain_id: 1)
+      )
+
+      foreign_token_1 = insert(:address).hash
+      foreign_token_2 = insert(:address).hash
+      unrelated_foreign_token = insert(:address).hash
+
+      Repo.insert!(%BridgedToken{
+        home_token_contract_address_hash: home_token_1.contract_address_hash,
+        foreign_token_contract_address_hash: foreign_token_1,
+        foreign_chain_id: Decimal.new(1)
+      })
+
+      Repo.insert!(%BridgedToken{
+        home_token_contract_address_hash: home_token_2.contract_address_hash,
+        foreign_token_contract_address_hash: foreign_token_2,
+        foreign_chain_id: Decimal.new(1)
+      })
+
+      coins_list =
+        [foreign_token_1, foreign_token_2, unrelated_foreign_token]
+        |> Enum.map(fn foreign_token_contract_address_hash ->
+          %{
+            "id" => "#{foreign_token_contract_address_hash}_id",
+            "symbol" => "#{foreign_token_contract_address_hash}_symbol",
+            "name" => "#{foreign_token_contract_address_hash}_name",
+            "platforms" => %{"ethereum" => "#{foreign_token_contract_address_hash}"}
+          }
+        end)
+
+      Bypass.expect_once(bypass, "GET", "/coins/list", fn conn ->
+        assert conn.query_string == "include_platform=true"
+        Conn.resp(conn, 200, Jason.encode!(coins_list))
+      end)
+
+      token_exchange_rates =
+        [foreign_token_1, foreign_token_2, unrelated_foreign_token]
+        |> Enum.reduce(%{}, fn foreign_token_contract_address_hash, acc ->
+          Map.put(acc, "#{foreign_token_contract_address_hash}_id", %{
+            "usd" => 1..100 |> Enum.random() |> Decimal.new() |> Decimal.mult(Decimal.from_float(0.7))
+          })
+        end)
+
+      joined_ids =
+        [foreign_token_1, foreign_token_2, unrelated_foreign_token]
+        |> Enum.reverse()
+        |> Enum.map_join(",", fn foreign_token_contract_address_hash -> "#{foreign_token_contract_address_hash}_id" end)
+
+      Bypass.expect_once(bypass, "GET", "/simple/price", fn conn ->
+        assert conn.query_string ==
+                 "vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&ids=#{joined_ids}"
+
+        Conn.resp(conn, 200, Jason.encode!(token_exchange_rates))
+      end)
+
+      GenServer.start_link(TokenFetcher, [])
+
+      :timer.sleep(100)
+
+      assert Repo.get_by(Token, contract_address_hash: home_token_1.contract_address_hash).fiat_value ==
+               token_exchange_rates["#{foreign_token_1}_id"]["usd"]
+
+      assert Repo.get_by(Token, contract_address_hash: home_token_2.contract_address_hash).fiat_value ==
+               token_exchange_rates["#{foreign_token_2}_id"]["usd"]
+
+      assert is_nil(Repo.get_by(Token, contract_address_hash: unrelated_foreign_token))
     end
   end
 end

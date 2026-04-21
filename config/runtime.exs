@@ -556,7 +556,10 @@ config :explorer, Explorer.Market.Fetcher.Token,
     ConfigHelper.parse_integer_env_var(
       "MARKET_TOKENS_MAX_BATCH_SIZE",
       ConfigHelper.parse_integer_env_var("TOKEN_EXCHANGE_RATE_MAX_BATCH_SIZE", 500)
-    )
+    ),
+  match_by_foreign_bridged_address?:
+    ConfigHelper.parse_bool_env_var("MARKET_TOKENS_MATCH_BY_FOREIGN_BRIDGED_ADDRESS", "false"),
+  foreign_bridged_chain_id: ConfigHelper.parse_integer_env_var("MARKET_TOKENS_FOREIGN_BRIDGED_CHAIN_ID", 1)
 
 config :explorer, Explorer.Market.Fetcher.History,
   enabled: !disable_exchange_rates? && ConfigHelper.parse_bool_env_var("MARKET_HISTORY_FETCHER_ENABLED", "true"),

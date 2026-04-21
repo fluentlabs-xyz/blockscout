@@ -122,6 +122,29 @@ defmodule Explorer.Chain.BridgedToken do
     |> Repo.all()
   end
 
+  @spec home_token_hashes_by_foreign_token_hashes([Hash.Address.t()], integer() | nil) ::
+          %{Hash.Address.t() => Hash.Address.t()}
+  def home_token_hashes_by_foreign_token_hashes([], _foreign_chain_id), do: %{}
+
+  def home_token_hashes_by_foreign_token_hashes(foreign_token_contract_address_hashes, foreign_chain_id) do
+    base_query =
+      from(bt in BridgedToken,
+        where: bt.foreign_token_contract_address_hash in ^foreign_token_contract_address_hashes,
+        select: {bt.foreign_token_contract_address_hash, bt.home_token_contract_address_hash}
+      )
+
+    query =
+      if is_nil(foreign_chain_id) do
+        base_query
+      else
+        from(bt in base_query, where: bt.foreign_chain_id == ^Decimal.new(foreign_chain_id))
+      end
+
+    query
+    |> Repo.all()
+    |> Map.new()
+  end
+
   def necessary_envs_passed? do
     config = Application.get_env(:explorer, __MODULE__)
     eth_omni_bridge_mediator = config[:eth_omni_bridge_mediator]
