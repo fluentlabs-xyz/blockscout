@@ -52,10 +52,11 @@ defmodule Explorer.Chain.SmartContract.Proxy.EIP7702 do
   end
 
   @doc """
-    Extracts the EIP-7702 delegate address from the bytecode.
+    Extracts delegate address from EIP-7702-compatible bytecode.
 
-    This function analyzes the given bytecode to identify and extract the delegate
-    address according to the EIP-7702 specification.
+    Supported formats:
+    - EIP-7702 designator: `0xef0100` + 20-byte delegate address
+    - Fluent ownable account: `0xef4400` + 20-byte owner/delegate + metadata
 
     ## Parameters
     - `contract_code_bytes`: The binary representation of the contract bytecode.
@@ -68,14 +69,19 @@ defmodule Explorer.Chain.SmartContract.Proxy.EIP7702 do
       iex> get_delegate_address(<<239, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20>>)
       "0x0102030405060708090a0b0c0d0e0f10111213"
 
+      iex> get_delegate_address(<<239, 68, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 255>>)
+      "0x0102030405060708090a0b0c0d0e0f10111213"
+
       iex> get_delegate_address(<<1, 2, 3>>)
       nil
   """
   @spec get_delegate_address(binary()) :: String.t() | nil
   def get_delegate_address(contract_code_bytes) do
     case contract_code_bytes do
-      # 0xef0100 <> address
-      <<239, 1, 0>> <> <<address::binary-size(20)>> -> ExplorerHelper.add_0x_prefix(address)
+      # 0xef0100 <> address (EIP-7702)
+      <<239, 1, 0, address::binary-size(20)>> -> ExplorerHelper.add_0x_prefix(address)
+      # 0xef4400 <> address <> metadata (Fluent ownable account)
+      <<239, 68, 0, address::binary-size(20), _metadata::binary>> -> ExplorerHelper.add_0x_prefix(address)
       _ -> nil
     end
   end
