@@ -26,11 +26,10 @@ scrape_configs:
 
 ## Grafana dashboard
 
-Import `grafana/blockscout-dashboard.json` into Grafana and select:
+Import `grafana/blockscout-dashboard.json` into Grafana and select your Prometheus `Datasource`.
 
-- `Datasource`: your Prometheus datasource.
-- `Metrics job`: the Prometheus job scraping `/metrics`.
-- `Public metrics job`: the Prometheus job scraping `/public-metrics`.
+The dashboard expects the scrape job names from the example above: `blockscout` for `/metrics` and
+`blockscout_public` for `/public-metrics`.
 
 The dashboard focuses on metrics defined in this repo:
 
