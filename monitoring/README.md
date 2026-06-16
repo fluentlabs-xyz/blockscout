@@ -9,19 +9,19 @@ Blockscout exposes two Prometheus endpoints:
 - `/metrics` contains app, indexer, JSON-RPC, Ecto, runtime, and queue metrics.
 - `/public-metrics` contains public chain KPI gauges such as successful transactions, active addresses, new token transfers, and smart-contract counts.
 
-When running through the Docker Compose nginx proxy, this fork exposes both paths on port `9090`.
+When running through the Docker Compose nginx proxy, this fork exposes both paths on port `9091`.
 
 ```yaml
 scrape_configs:
   - job_name: blockscout
     metrics_path: /metrics
     static_configs:
-      - targets: ["<host>:9090"]
+      - targets: ["<host>:9091"]
 
   - job_name: blockscout_public
     metrics_path: /public-metrics
     static_configs:
-      - targets: ["<host>:9090"]
+      - targets: ["<host>:9091"]
 ```
 
 ## Grafana dashboard
