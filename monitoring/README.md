@@ -13,7 +13,7 @@ When running through the Docker Compose nginx proxy, this fork exposes both path
 
 ```yaml
 scrape_configs:
-  - job_name: blockscout
+  - job_name: mainnet-blockscout
     metrics_path: /metrics
     static_configs:
       - targets: ["<host>:9091"]
@@ -28,7 +28,7 @@ scrape_configs:
 
 Import `grafana/blockscout-dashboard.json` into Grafana and select your Prometheus `Datasource`.
 
-The dashboard expects the scrape job names from the example above: `blockscout` for `/metrics` and
+The dashboard expects the scrape job names from the example above: `mainnet-blockscout` for `/metrics` and
 `blockscout_public` for `/public-metrics`.
 
 The dashboard focuses on metrics defined in this repo:
