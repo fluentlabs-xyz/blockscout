@@ -108,7 +108,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(up{job=~\"$job\"})",
+          "expr": "max(up{job=\"mainnet-blockscout\"})",
           "instant": false,
           "legendFormat": "availability",
           "range": true,
@@ -201,7 +201,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(latest_block_number{job=~\"$job\"})",
+          "expr": "max(latest_block_number{job=\"mainnet-blockscout\"})",
           "legendFormat": "latest block",
           "range": true,
           "refId": "A"
@@ -212,7 +212,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(latest_batch_number{job=~\"$job\"})",
+          "expr": "max(latest_batch_number{job=\"mainnet-blockscout\"})",
           "hide": false,
           "legendFormat": "latest batch",
           "range": true,
@@ -284,7 +284,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(delay_from_last_node_block{job=~\"$job\"})",
+          "expr": "max(delay_from_last_node_block{job=\"mainnet-blockscout\"})",
           "legendFormat": "node delay",
           "range": true,
           "refId": "A"
@@ -355,7 +355,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(time() - latest_block_timestamp{job=~\"$job\"})",
+          "expr": "max(time() - latest_block_timestamp{job=\"mainnet-blockscout\"})",
           "legendFormat": "block age",
           "range": true,
           "refId": "A"
@@ -426,7 +426,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(time() - latest_batch_timestamp{job=~\"$job\"})",
+          "expr": "max(time() - latest_batch_timestamp{job=\"mainnet-blockscout\"})",
           "legendFormat": "batch age",
           "range": true,
           "refId": "A"
@@ -518,7 +518,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (method) (rate(json_rpc_requests_count{job=~\"$job\"}[5m]))",
+          "expr": "sum by (method) (rate(json_rpc_requests_count{job=\"mainnet-blockscout\"}[5m]))",
           "legendFormat": "{{method}}",
           "range": true,
           "refId": "A"
@@ -610,7 +610,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(import_errors_count{job=~\"$job\"}[5m]))",
+          "expr": "sum(rate(import_errors_count{job=\"mainnet-blockscout\"}[5m]))",
           "legendFormat": "import errors",
           "range": true,
           "refId": "A"
@@ -621,7 +621,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "sum by (method) (rate(json_rpc_requests_errors_count{job=~\"$job\"}[5m]))",
+          "expr": "sum by (method) (rate(json_rpc_requests_errors_count{job=\"mainnet-blockscout\"}[5m]))",
           "legendFormat": "rpc errors {{method}}",
           "range": true,
           "refId": "B"
@@ -713,7 +713,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, fetcher) (rate(block_full_processing_duration_microseconds_bucket{job=~\"$job\"}[5m]))) / 1000000",
+          "expr": "histogram_quantile(0.95, sum by (le, fetcher) (rate(block_full_processing_duration_microseconds_bucket{job=\"mainnet-blockscout\"}[5m]))) / 1000000",
           "legendFormat": "full p95 {{fetcher}}",
           "range": true,
           "refId": "A"
@@ -724,7 +724,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, fetcher) (rate(block_import_duration_microseconds_bucket{job=~\"$job\"}[5m]))) / 1000000",
+          "expr": "histogram_quantile(0.95, sum by (le, fetcher) (rate(block_import_duration_microseconds_bucket{job=\"mainnet-blockscout\"}[5m]))) / 1000000",
           "legendFormat": "import p95 {{fetcher}}",
           "range": true,
           "refId": "B"
@@ -816,7 +816,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, stage, runner, step) (rate(block_import_stage_runner_duration_microseconds_bucket{job=~\"$job\"}[5m]))) / 1000000",
+          "expr": "histogram_quantile(0.95, sum by (le, stage, runner, step) (rate(block_import_stage_runner_duration_microseconds_bucket{job=\"mainnet-blockscout\"}[5m]))) / 1000000",
           "legendFormat": "{{stage}} / {{runner}} / {{step}}",
           "range": true,
           "refId": "A"
@@ -908,7 +908,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(missing_blocks_count{job=~\"$job\"})",
+          "expr": "max(missing_blocks_count{job=\"mainnet-blockscout\"})",
           "legendFormat": "missing blocks",
           "range": true,
           "refId": "A"
@@ -919,7 +919,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(missing_internal_transactions_count{job=~\"$job\"})",
+          "expr": "max(missing_internal_transactions_count{job=\"mainnet-blockscout\"})",
           "legendFormat": "missing internal tx blocks",
           "range": true,
           "refId": "B"
@@ -930,7 +930,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(missing_current_token_balances_count{job=~\"$job\"})",
+          "expr": "max(missing_current_token_balances_count{job=\"mainnet-blockscout\"})",
           "legendFormat": "missing current balances",
           "range": true,
           "refId": "C"
@@ -941,7 +941,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(missing_archival_token_balances_count{job=~\"$job\"})",
+          "expr": "max(missing_archival_token_balances_count{job=\"mainnet-blockscout\"})",
           "legendFormat": "missing historical balances",
           "range": true,
           "refId": "D"
@@ -1033,7 +1033,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(multichain_search_db_main_export_queue_count{job=~\"$job\"})",
+          "expr": "max(multichain_search_db_main_export_queue_count{job=\"mainnet-blockscout\"})",
           "legendFormat": "main",
           "range": true,
           "refId": "A"
@@ -1044,7 +1044,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(multichain_search_db_export_balances_queue_count{job=~\"$job\"})",
+          "expr": "max(multichain_search_db_export_balances_queue_count{job=\"mainnet-blockscout\"})",
           "legendFormat": "balances",
           "range": true,
           "refId": "B"
@@ -1055,7 +1055,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(multichain_search_db_export_counters_queue_count{job=~\"$job\"})",
+          "expr": "max(multichain_search_db_export_counters_queue_count{job=\"mainnet-blockscout\"})",
           "legendFormat": "counters",
           "range": true,
           "refId": "C"
@@ -1066,7 +1066,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(multichain_search_db_export_token_info_queue_count{job=~\"$job\"})",
+          "expr": "max(multichain_search_db_export_token_info_queue_count{job=\"mainnet-blockscout\"})",
           "legendFormat": "token info",
           "range": true,
           "refId": "D"
@@ -1158,7 +1158,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max by (fetcher) (memory_consumed{job=~\"$job\"})",
+          "expr": "max by (fetcher) (memory_consumed{job=\"mainnet-blockscout\"})",
           "legendFormat": "{{fetcher}}",
           "range": true,
           "refId": "A"
@@ -1250,7 +1250,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(event_handler_queue_length{job=~\"$job\"}) by (handler)",
+          "expr": "max(event_handler_queue_length{job=\"mainnet-blockscout\"}) by (handler)",
           "legendFormat": "{{handler}}",
           "range": true,
           "refId": "A"
@@ -1342,7 +1342,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(success_transactions_number{job=~\"$public_job\"})",
+          "expr": "max(success_transactions_number{job=\"blockscout_public\"})",
           "legendFormat": "successful tx",
           "range": true,
           "refId": "A"
@@ -1353,7 +1353,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(active_addresses_number{job=~\"$public_job\"})",
+          "expr": "max(active_addresses_number{job=\"blockscout_public\"})",
           "legendFormat": "active addresses",
           "range": true,
           "refId": "B"
@@ -1364,7 +1364,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(new_addresses_number{job=~\"$public_job\"})",
+          "expr": "max(new_addresses_number{job=\"blockscout_public\"})",
           "legendFormat": "new addresses",
           "range": true,
           "refId": "C"
@@ -1375,7 +1375,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(new_token_transfers_number{job=~\"$public_job\"})",
+          "expr": "max(new_token_transfers_number{job=\"blockscout_public\"})",
           "legendFormat": "token transfers",
           "range": true,
           "refId": "D"
@@ -1386,7 +1386,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(deployed_smart_contracts_number{job=~\"$public_job\"})",
+          "expr": "max(deployed_smart_contracts_number{job=\"blockscout_public\"})",
           "legendFormat": "deployed contracts",
           "range": true,
           "refId": "E"
@@ -1397,7 +1397,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "max(verified_smart_contracts_number{job=~\"$public_job\"})",
+          "expr": "max(verified_smart_contracts_number{job=\"blockscout_public\"})",
           "legendFormat": "verified contracts",
           "range": true,
           "refId": "F"
@@ -1428,58 +1428,6 @@
         "refresh": 1,
         "regex": "",
         "type": "datasource"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "blockscout",
-          "value": "blockscout"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource}"
-        },
-        "definition": "label_values(up, job)",
-        "hide": 0,
-        "includeAll": false,
-        "label": "Metrics job",
-        "multi": false,
-        "name": "job",
-        "options": [],
-        "query": {
-          "query": "label_values(up, job)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "refresh": 1,
-        "regex": "",
-        "sort": 1,
-        "type": "query"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "blockscout_public",
-          "value": "blockscout_public"
-        },
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource}"
-        },
-        "definition": "label_values(up, job)",
-        "hide": 0,
-        "includeAll": false,
-        "label": "Public metrics job",
-        "multi": false,
-        "name": "public_job",
-        "options": [],
-        "query": {
-          "query": "label_values(up, job)",
-          "refId": "PrometheusVariableQueryEditor-VariableQuery"
-        },
-        "refresh": 1,
-        "regex": "",
-        "sort": 1,
-        "type": "query"
       }
     ]
   },
