@@ -41,6 +41,49 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
     end
   end
 
+  describe "/api/v2/smart-contracts/{address_hash}/verification/via/fluent" do
+    setup do
+      bypass = Bypass.open()
+      old_env = Application.get_env(:explorer, Explorer.SmartContract.FluentVerifierInterface)
+
+      Application.put_env(:explorer, Explorer.SmartContract.FluentVerifierInterface,
+        service_url: "http://localhost:#{bypass.port}"
+      )
+
+      on_exit(fn ->
+        if old_env do
+          Application.put_env(:explorer, Explorer.SmartContract.FluentVerifierInterface, old_env)
+        else
+          Application.delete_env(:explorer, Explorer.SmartContract.FluentVerifierInterface)
+        end
+
+        Bypass.down(bypass)
+      end)
+
+      {:ok, bypass: bypass}
+    end
+
+    test "returns already verified for verified contract when bytecode has not changed", %{conn: conn} do
+      contract = insert(:smart_contract, is_changed_bytecode: false)
+
+      request = post(conn, "/api/v2/smart-contracts/#{contract.address_hash}/verification/via/fluent", fluent_params())
+
+      assert %{"message" => "Already verified"} = json_response(request, 200)
+    end
+
+    test "starts verification for verified contract when bytecode has changed", %{conn: conn, bypass: bypass} do
+      Bypass.stub(bypass, "POST", "/api/v1/fluent/verify-wasm", fn conn ->
+        Conn.resp(conn, 200, Jason.encode!(fluent_verifier_success_response()))
+      end)
+
+      contract = insert(:smart_contract, is_changed_bytecode: true)
+
+      request = post(conn, "/api/v2/smart-contracts/#{contract.address_hash}/verification/via/fluent", fluent_params())
+
+      assert %{"message" => "Smart-contract verification started"} = json_response(request, 200)
+    end
+  end
+
   if Application.compile_env(:explorer, :chain_type) !== :zksync do
     describe "bytecode lookup on verification requests" do
       # Set up Mox and start on-demand bytecode fetcher with mocked transport
@@ -535,5 +578,35 @@ defmodule BlockScoutWeb.API.V2.VerificationControllerTest do
 
   defp to_str(str) when is_binary(str) do
     str
+  end
+
+  defp fluent_params do
+    %{
+      "contract_name" => "Counter",
+      "abi" => [],
+      "compile_settings" => %{
+        "sdk_version" => "v0.1.0"
+      },
+      "git_source" => %{
+        "repository_url" => "https://example.com/fluent-counter.git",
+        "commit_ref" => "0000000000000000000000000000000000000000"
+      }
+    }
+  end
+
+  defp fluent_verifier_success_response do
+    %{
+      "status" => "STATUS_SUCCESS",
+      "result" => %{
+        "source_files" => %{
+          "src/lib.rs" => "pub fn deploy() {}",
+          "Cargo.toml" => "[package]\nname = \"counter\"\n"
+        },
+        "rustc_version" => "rustc 1.88.0",
+        "sdk_version" => "0.1.0",
+        "build_platform" => "linux-x86_64",
+        "compile_settings" => %{}
+      }
+    }
   end
 end
