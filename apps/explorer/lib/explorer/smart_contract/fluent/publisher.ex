@@ -156,6 +156,8 @@ defmodule Explorer.SmartContract.Fluent.Publisher do
       compiler_settings: nil,
       license_type: :none,
       is_blueprint: false,
+      is_changed_bytecode: false,
+      bytecode_checked_at: DateTime.utc_now(),
       language: :fluent_rust,
       package_name: params["package_name"],
       fluent_metadata: params["fluent_metadata"]

@@ -419,7 +419,7 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
     Logger.info("API v2: Fluent smart-contract #{address_hash_string} verification request received.")
 
     with {:not_found, true} <- {:not_found, FluentVerifierInterface.enabled?()},
-         :validated <- validate_address(conn, params),
+         :validated <- validate_address(conn, params, allow_changed_bytecode?: true),
          # Validate Fluent payload against the current HTTP schema
          :fluent_request_validated <- validate_fluent_request(params) do
       # All checks passed, queue the unified job
@@ -547,7 +547,7 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
     end
   end
 
-  defp validate_address(conn, %{"address_hash" => address_hash_string} = params) do
+  defp validate_address(conn, %{"address_hash" => address_hash_string} = params, options \\ []) do
     with {:format, {:ok, address_hash}} <- {:format, Chain.string_to_address_hash(address_hash_string)},
          {:not_a_smart_contract, {:ok, _bytecode}} <-
            {:not_a_smart_contract,
@@ -555,10 +555,20 @@ defmodule BlockScoutWeb.API.V2.VerificationController do
             |> AccessHelper.conn_to_ip_string()
             |> ContractCode.get_or_fetch_bytecode(address_hash)},
          {:ok, false} <- AccessHelper.restricted_access?(address_hash_string, params),
-         {:already_verified, false} <-
-           {:already_verified, SmartContract.verified_with_full_match?(address_hash, @api_true)} do
+         {:already_verified, false} <- {:already_verified, already_verified?(address_hash, options)} do
       :validated
     end
+  end
+
+  defp already_verified?(address_hash, allow_changed_bytecode?: true) do
+    case SmartContract.address_hash_to_smart_contract(address_hash, @api_true) do
+      %SmartContract{partially_verified: false, is_changed_bytecode: false} -> true
+      _ -> false
+    end
+  end
+
+  defp already_verified?(address_hash, _options) do
+    SmartContract.verified_with_full_match?(address_hash, @api_true)
   end
 
   defp check_microservice do
