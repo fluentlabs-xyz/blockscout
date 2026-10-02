@@ -23,6 +23,7 @@ services:
     depends_on:
       - db
       - redis-db
+      - smart-contract-verifier
     extends:
       file: ./services/backend.yml
       service: backend
@@ -39,6 +40,7 @@ services:
 #        ETHEREUM_JSONRPC_WS_URL: ws://host.docker.internal:8545/
 #        CHAIN_ID: '1337'
         MICROSERVICE_FLUENT_VERIFIER_URL: http://fluent-verifier:8050
+        MICROSERVICE_SC_VERIFIER_FALLBACK_URL: http://smart-contract-verifier:8050
         DATABASE_URL: ${DATABASE_URL}
         PORT: "4000"
 
@@ -53,6 +55,11 @@ services:
       dockerfile: ./docker/Dockerfile
       args:
         RELEASE_VERSION: 9.0.2
+
+  smart-contract-verifier:
+    extends:
+      file: ./services/smart-contract-verifier.yml
+      service: smart-contract-verifier
 
   visualizer:
     extends:
