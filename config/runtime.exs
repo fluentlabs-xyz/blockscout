@@ -685,6 +685,13 @@ config :explorer, Explorer.SmartContract.RustVerifierInterfaceBehaviour,
   eth_bytecode_db?: enabled? && type == "eth_bytecode_db",
   api_key: System.get_env("MICROSERVICE_SC_VERIFIER_API_KEY")
 
+# A self-hosted smart-contract-verifier that verifies compiler versions the service above does not list yet.
+sc_verifier_fallback_url = ConfigHelper.parse_url_env_var("MICROSERVICE_SC_VERIFIER_FALLBACK_URL")
+
+config :explorer, Explorer.SmartContract.RustVerifierFallbackInterface,
+  service_url: sc_verifier_fallback_url,
+  enabled: enabled? && !is_nil(sc_verifier_fallback_url)
+
 config :explorer, Explorer.Visualize.Sol2uml,
   service_url: ConfigHelper.parse_url_env_var("MICROSERVICE_VISUALIZE_SOL2UML_URL"),
   enabled: ConfigHelper.parse_bool_env_var("MICROSERVICE_VISUALIZE_SOL2UML_ENABLED")

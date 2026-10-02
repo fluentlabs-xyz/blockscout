@@ -1,14 +1,29 @@
 defmodule Explorer.SmartContract.RustVerifierInterfaceBehaviour do
   @moduledoc """
     This behaviour module was created in order to add possibility to extend the functionality of RustVerifierInterface
+
+    Options:
+
+      * `:config_key` - the `:explorer` application env key holding `service_url`, `enabled` and `api_key`
+        for the using module. Defaults to this module's key, shared by `RustVerifierInterface` and
+        `EthBytecodeDBInterface`.
+      * `:fallback` - when `true`, Solidity and Vyper verifications are routed through
+        `Explorer.SmartContract.RustVerifierFallback`, which sends compiler versions the primary
+        verifier does not list to `Explorer.SmartContract.RustVerifierFallbackInterface`.
   """
-  defmacro __using__(_) do
+  defmacro __using__(opts) do
+    config_key = Keyword.get(opts, :config_key, Explorer.SmartContract.RustVerifierInterfaceBehaviour)
+    fallback = Keyword.get(opts, :fallback, false)
+
     # credo:disable-for-next-line
     quote([]) do
       alias Explorer.HttpClient
+      alias Explorer.SmartContract.RustVerifierFallback
       alias Explorer.Utility.Microservice
       require Logger
 
+      @config_key unquote(config_key)
+      @fallback unquote(fallback)
       @post_timeout :timer.minutes(5)
       @request_error_msg "Error while sending request to verification microservice"
 
@@ -24,7 +39,7 @@ defmodule Explorer.SmartContract.RustVerifierInterfaceBehaviour do
             } = body,
             metadata
           ) do
-        http_post_request(solidity_multiple_files_verification_url(), append_metadata(body, metadata))
+        post_verification(:solc, & &1.solidity_multiple_files_verification_url(), body, metadata)
       end
 
       def verify_standard_json_input(
@@ -36,7 +51,7 @@ defmodule Explorer.SmartContract.RustVerifierInterfaceBehaviour do
             } = body,
             metadata
           ) do
-        http_post_request(solidity_standard_json_verification_url(), append_metadata(body, metadata))
+        post_verification(:solc, & &1.solidity_standard_json_verification_url(), body, metadata)
       end
 
       def zksync_verify_standard_json_input(
@@ -60,7 +75,7 @@ defmodule Explorer.SmartContract.RustVerifierInterfaceBehaviour do
             } = body,
             metadata
           ) do
-        http_post_request(vyper_multiple_files_verification_url(), append_metadata(body, metadata))
+        post_verification(:vyper, & &1.vyper_multiple_files_verification_url(), body, metadata)
       end
 
       def vyper_verify_standard_json(
@@ -72,7 +87,22 @@ defmodule Explorer.SmartContract.RustVerifierInterfaceBehaviour do
             } = body,
             metadata
           ) do
-        http_post_request(vyper_standard_json_verification_url(), append_metadata(body, metadata))
+        post_verification(:vyper, & &1.vyper_standard_json_verification_url(), body, metadata)
+      end
+
+      # Sends the verification to this module, or to the fallback verifier when the fallback is on
+      # and the primary verifier does not list the requested compiler version.
+      defp post_verification(compiler, url_fun, body, metadata) do
+        target = verification_target(compiler, body)
+        target.http_post_request(url_fun.(target), append_metadata(body, metadata))
+      end
+
+      defp verification_target(compiler, body) do
+        if @fallback do
+          RustVerifierFallback.verifier_for(__MODULE__, compiler, body)
+        else
+          __MODULE__
+        end
       end
 
       def http_post_request(url, body, options \\ []) do
@@ -99,7 +129,7 @@ defmodule Explorer.SmartContract.RustVerifierInterfaceBehaviour do
       end
 
       defp put_api_key_header(headers) do
-        api_key = Application.get_env(:explorer, Explorer.SmartContract.RustVerifierInterfaceBehaviour)[:api_key]
+        api_key = Application.get_env(:explorer, @config_key)[:api_key]
 
         if api_key do
           [{"x-api-key", api_key} | headers]
@@ -216,10 +246,10 @@ defmodule Explorer.SmartContract.RustVerifierInterfaceBehaviour do
       def base_api_url, do: "#{base_url()}" <> "/api/v2"
 
       def base_url do
-        Microservice.base_url(Explorer.SmartContract.RustVerifierInterfaceBehaviour)
+        Microservice.base_url(@config_key)
       end
 
-      def enabled?, do: Application.get_env(:explorer, Explorer.SmartContract.RustVerifierInterfaceBehaviour)[:enabled]
+      def enabled?, do: Application.get_env(:explorer, @config_key)[:enabled]
 
       defp append_metadata(body, metadata) when is_map(body) do
         body

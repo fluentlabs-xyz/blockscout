@@ -23,6 +23,7 @@ services:
     depends_on:
       - db
       - redis-db
+      - smart-contract-verifier
     extends:
       file: ./services/backend.yml
       service: backend
@@ -35,8 +36,14 @@ services:
         INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: 'true'
         CHAIN_ID: '31337'
         MICROSERVICE_FLUENT_VERIFIER_URL: http://fluent-verifier:8050
+        MICROSERVICE_SC_VERIFIER_FALLBACK_URL: http://smart-contract-verifier:8050
         DATABASE_URL: ${DATABASE_URL}
         PORT: "4000"
+
+  smart-contract-verifier:
+    extends:
+      file: ./services/smart-contract-verifier.yml
+      service: smart-contract-verifier
 
   visualizer:
     extends:

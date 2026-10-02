@@ -4,7 +4,13 @@ defmodule Explorer.SmartContract.CompilerVersion do
   """
 
   alias Explorer.{Helper, HttpClient}
-  alias Explorer.SmartContract.{RustVerifierInterface, StylusVerifierInterface, FluentVerifierInterface}
+
+  alias Explorer.SmartContract.{
+    FluentVerifierInterface,
+    RustVerifierFallback,
+    RustVerifierInterface,
+    StylusVerifierInterface
+  }
 
   @unsupported_solc_versions ~w(0.1.1 0.1.2)
   @unsupported_vyper_versions ~w(v0.2.9 v0.2.10)
@@ -16,11 +22,13 @@ defmodule Explorer.SmartContract.CompilerVersion do
   def fetch_versions(compiler)
 
   def fetch_versions(:solc) do
-    fetch_compiler_versions(&RustVerifierInterface.get_versions_list/0, :solc)
+    result = fetch_compiler_versions(&RustVerifierInterface.get_versions_list/0, :solc)
+    RustVerifierFallback.add_fallback_versions(result, :solc)
   end
 
   def fetch_versions(:vyper) do
-    fetch_compiler_versions(&RustVerifierInterface.vyper_get_versions_list/0, :vyper)
+    result = fetch_compiler_versions(&RustVerifierInterface.vyper_get_versions_list/0, :vyper)
+    RustVerifierFallback.add_fallback_versions(result, :vyper)
   end
 
   def fetch_versions(:zk) do
