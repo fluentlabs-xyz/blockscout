@@ -31,6 +31,7 @@ on:
 
 env:
   MIX_ENV: test
+  NODE_VERSION: "24.22.1"
   OTP_VERSION: '27.3.4.6'
   ELIXIR_VERSION: '1.19.4'
   ACCOUNT_AUTH0_DOMAIN: "blockscoutcom.us.auth0.com"
@@ -42,6 +43,10 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
       - id: set-matrix
         run: |
           echo "matrix=$(node -e '
@@ -113,6 +118,10 @@ jobs:
     name: Build and Cache deps
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
       - uses: actions/checkout@v5
       - uses: erlef/setup-beam@v1
         with:
@@ -153,9 +162,9 @@ jobs:
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm-
 
       - name: Conditionally build Explorer NPM Cache
         if: steps.explorer-npm-cache.outputs.cache-hit != 'true'
@@ -167,9 +176,9 @@ jobs:
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-
 
       - name: Conditionally build Blockscout Web NPM Cache
         if: steps.blockscoutweb-npm-cache.outputs.cache-hit != 'true'
@@ -376,18 +385,18 @@ jobs:
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm-
 
       - name: Restore Blockscout Web NPM Cache
         uses: actions/cache@v4
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-
 
       - name: Run cspell
         uses: streetsidesoftware/cspell-action@v6
@@ -400,6 +409,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-cache
     steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
       - uses: actions/checkout@v5
       - uses: erlef/setup-beam@v1
         with:
@@ -425,18 +438,18 @@ jobs:
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm-
 
       - name: Restore Blockscout Web NPM Cache
         uses: actions/cache@v4
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-
 
       - name: Build assets
         run: node node_modules/webpack/bin/webpack.js --mode development
@@ -450,6 +463,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-cache
     steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
       - uses: actions/checkout@v5
       - uses: erlef/setup-beam@v1
         with:
@@ -475,9 +492,9 @@ jobs:
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-
 
       - name: Build assets
         run: node node_modules/webpack/bin/webpack.js --mode development
@@ -608,6 +625,10 @@ jobs:
           # Maps tcp port 5432 on service container to the host
           - 5432:5432
     steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
       - uses: actions/checkout@v5
       - uses: erlef/setup-beam@v1
         with:
@@ -633,9 +654,9 @@ jobs:
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm
 
       - run: ./bin/install_chrome_headless.sh
       - name: mix test --exclude no_nethermind
@@ -759,6 +780,10 @@ jobs:
           # Maps tcp port 5432 on service container to the host
           - 5432:5432
     steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
       - uses: actions/checkout@v5
       - uses: erlef/setup-beam@v1
         with:
@@ -784,18 +809,18 @@ jobs:
         id: explorer-npm-cache
         with:
           path: apps/explorer/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm-${{ hashFiles('apps/explorer/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-explorer-npm-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-explorer-npm-
 
       - name: Restore Blockscout Web NPM Cache
         uses: actions/cache@v4
         id: blockscoutweb-npm-cache
         with:
           path: apps/block_scout_web/assets/node_modules
-          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
+          key: ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-${{ hashFiles('apps/block_scout_web/assets/package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-blockscoutweb-npm-
+            ${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ env.MIX_ENV }}-node-${{ env.NODE_VERSION }}-blockscoutweb-npm-
 
       - name: Build assets
         run: node node_modules/webpack/bin/webpack.js --mode development

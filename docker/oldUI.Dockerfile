@@ -24,17 +24,29 @@ COPY rel ./rel
 COPY apps ./apps
 
 ##############################################################
-FROM builder-deps AS builder-ui
+FROM node:24.22.1-alpine AS assets
 
-RUN apk --no-cache --update add nodejs npm && \
-    npm install npm@latest
+WORKDIR /app
+
+RUN apk --no-cache add git python3 make g++
+
+COPY --from=builder-deps /app/deps/phoenix ./deps/phoenix
+COPY --from=builder-deps /app/deps/phoenix_html ./deps/phoenix_html
+COPY --from=builder-deps /app/apps/block_scout_web/assets ./apps/block_scout_web/assets
+COPY --from=builder-deps /app/apps/explorer/package*.json ./apps/explorer/
 
 # Add blockscout npm deps
 RUN cd apps/block_scout_web/assets/ && \
-    npm install && \
+    npm ci && \
     npm run deploy && \
     cd /app/apps/explorer/ && \
-    npm install
+    npm ci
+
+##############################################################
+FROM builder-deps AS builder-ui
+
+COPY --from=assets /app/apps/block_scout_web/priv/static ./apps/block_scout_web/priv/static
+COPY --from=assets /app/apps/explorer/node_modules ./apps/explorer/node_modules
 
 RUN cd apps/block_scout_web && mix phx.digest
 
